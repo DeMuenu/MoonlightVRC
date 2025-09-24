@@ -1,0 +1,90 @@
+#ifndef MOONSLIGHT_INCLUDED
+#define MOONSLIGHT_INCLUDED
+
+// You can override this before including if TEXCOORD2 is taken:
+//   #define MOONSLIGHT_TEXCOORD TEXCOORD4
+#ifndef MOONSLIGHT_TEXCOORD
+#define MOONSLIGHT_TEXCOORD TEXCOORD2
+#endif
+
+// Pick a safe max for your target hardware.
+#ifndef MAX_LIGHTS
+#define MAX_LIGHTS 80
+#endif
+
+#include "UnityCG.cginc"
+
+// ---------- Uniforms (set from script as Global/Material arrays) ----------
+uniform float4 _LightPositions[MAX_LIGHTS];   // xyz = pos, w = radius
+uniform float4 _LightColors[MAX_LIGHTS];      // xyz = rgb (not normalized), w = intensity scalar
+uniform float4 _LightDirections[MAX_LIGHTS];  // xyz = dir,  w = half-angle in degrees (cone)
+uniform float  _LightType[MAX_LIGHTS];        // 0 = sphere, 1 = cone
+uniform float  _PlayerCount;
+
+// ---------- Helpers you can inject into your v2f / vertex ----------
+#define MOONSLIGHT_V2F_MEMBERS float3 worldPos : MOONSLIGHT_TEXCOORD;
+
+inline void MoonsLight_FillV2F(float4 vertexOS, out float3 worldPos)
+{
+    worldPos = mul(unity_ObjectToWorld, vertexOS).xyz;
+}
+
+// ---------- Core lighting (return value is 0..1 rgba contribution) ----------
+inline float4 MoonsLight_Accumulate(float3 worldPos, float3 worldNormal)
+{
+    float3 N = normalize(worldNormal);
+    float4 accum = float4(0,0,0,1);
+    float  dIntensity = 0.0;
+
+    int count = (int)_PlayerCount;
+
+    [loop]
+    for (int idx = 0; idx < MAX_LIGHTS; idx++)
+    {
+        if (idx >= count) break;
+
+        float3 q      = _LightPositions[idx].xyz;
+        float  radius = _LightPositions[idx].w;
+
+        float3 L      = normalize(q - worldPos);
+        float  NdotL  = saturate(dot(N, L) * 0.5 + 0.5); // one-sided Lambert
+        float  contrib = 0.0;
+
+        if (_LightType[idx] == 0.0)
+        {
+            // Sphere (SDF-ish falloff reused from your code)
+            float sd = length(worldPos - q) - radius;
+            sd = lerp(1.0, -sd, step(0.0, sd));
+            contrib = min(1.0, max(max(sd, max(0.01, _LightColors[idx].a) / (sd * sd)), 0.01));
+            dIntensity += contrib * NdotL;
+        }
+        else
+        {
+            // Cone (directional spot)
+            float threshold = (-1 + _LightDirections[idx].w / 180.0);
+            contrib = min(dot(normalize(worldPos - q), -normalize(_LightDirections[idx].xyz)), 0.0);
+            contrib = 1.0 - step(threshold, contrib);
+            float distanceFromLight = length(worldPos - q);
+            contrib = min(1.0, contrib * (max(0.01, _LightColors[idx].a) / (distanceFromLight * distanceFromLight)));
+            dIntensity += contrib * NdotL;
+        }
+
+        float3 lightRgb = normalize(_LightColors[idx].xyz);
+        accum += contrib * float4(lightRgb, 1.0);
+    }
+
+    accum.xyz = normalize(accum.xyz);
+    accum.xyz = min(accum.xyz * dIntensity, 1.0);
+    accum.w   = 1.0;
+    return min(accum, 1.0);
+}
+
+// Optional: reuse your camera-distance fade
+inline float4 MoonsLight_ApplyDistanceFade(float4 color, float3 worldPos, float distanceFadeMultiplier, float distanceMin)
+{
+    float dist = length(_WorldSpaceCameraPos.xyz - worldPos) / 100.0;
+    color.xyz *= min(1.0, max(distanceMin, max(0.0, 1.0 - abs(dist) * distanceFadeMultiplier)));
+    return color;
+}
+
+#endif // MOONSLIGHT_INCLUDED
