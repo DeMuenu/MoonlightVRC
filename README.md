@@ -2,7 +2,7 @@
 
 ## Idea
 
-When creating a World for VRChat that reveals items around the player as they walk up to them, I stumbled across the problem that Quest doesn't handle realtime lights well. As a result, you may end up spending tens of hours coding your own light system.
+When creating a World for VRChat that reveals items around the player as they walk up to them, I stumbled across the problem that Quest doesn't handle realtime lights well. As a result, I may have ended up spending tens of hours coding my own light system.
 
 What this includes:
 - Point/spotlights editable at runtime.
@@ -16,7 +16,8 @@ Work in progress:
   
 Planned:
 - Basic shadows via a shadow emitter map. The plan is to only sample the highest points of a map area and then calculate if the light ray is intersecting the object. This should provide basic shadow casting that is much more performant than raycasting.
-
+- Support for addative baked light maps and ambient lighting.
+  
 ---
 
 ## Performance
