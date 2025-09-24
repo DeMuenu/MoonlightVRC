@@ -32,6 +32,7 @@ Shader "DeMuenu/World/Hoppou/RevealStandart"
             #pragma fragment frag
 
             #include "UnityCG.cginc"
+            #include "Includes/LightStrength.hlsl"
 
             //MoonsLight Defines
             #define MAX_LIGHTS 80 // >= maxPlayers in script
@@ -122,13 +123,12 @@ Shader "DeMuenu/World/Hoppou/RevealStandart"
                 float4 dmax = float4(0,0,0,1);
                 float dIntensity = 0;
                 [loop]
-                for (int idx = 0; idx < MAX_LIGHTS; idx++)
+                for (int LightCounter = 0; LightCounter < MAX_LIGHTS; LightCounter++)
                 {
-                    if (idx >= count) break;
-                    float radius = _LightPositions[idx].a;
-                    float3 q = _LightPositions[idx].xyz;
+                    if (LightCounter >= count) break;
+                    float3 Lightposition = _LightPositions[LightCounter].xyz;
 
-                    float distanceFromLight = length(i.worldPos - q);
+                    float distanceFromLight = length(i.worldPos - Lightposition);
                     if (distanceFromLight > _LightCutoffDistance) continue;
                     
                     float sd = 0.0;
@@ -139,29 +139,11 @@ Shader "DeMuenu/World/Hoppou/RevealStandart"
                     
 
                     //Lambertian diffuse
-                    float3 L = normalize(q - i.worldPos);   // q = light position
+                    float3 L = normalize(Lightposition - i.worldPos);   // Lightposition = light position
                     float  NdotL = saturate(dot(N, L) * 0.5 + 0.5);      // one-sided Lambert
                     if (NdotL <= 0) continue;
 
-                    if(_LightType[idx] == 0)
-                    {
-                        float invSq    = _LightColors[idx].a / max(1e-4, max(0, max(1, distanceFromLight - radius) * invSqMul) * max(0, max(1, distanceFromLight - radius) * invSqMul));
-                        contrib  = invSq;
-                        //contrib = contrib * step(-distance(i.worldPos, q), -1 + radius * 1); // 0 if outside sphere
-                        dIntensity += contrib * NdotL;
-                    }
-                    else if (_LightType[idx] == 1)
-                    {
-                        float invSq    = _LightColors[idx].a / max(1e-4, (distanceFromLight * invSqMul) * (distanceFromLight * invSqMul));
-                        float threshold = (-1 + _LightDirections[idx].w / 180);
-                        
-                        contrib = min(dot(normalize(i.worldPos - q), -normalize(_LightDirections[idx].xyz)), 0);
-                        contrib= 1 - step(threshold, contrib);
-                        
-                        contrib = contrib * invSq;
-                        dIntensity += contrib * NdotL;
-                    }
-                    float3 LightColor = _LightColors[idx].xyz; // * NormalDirMult;
+                    LightTypeCalculations(_LightColors, LightCounter, i, NdotL, dIntensity, _LightPositions[LightCounter].a, _LightPositions[LightCounter].xyz);
 
 
 
