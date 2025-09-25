@@ -11,7 +11,7 @@ Shader "DeMuenu/World/Hoppou/Water"
         _NormalMapScrollSpeed ("Normal Map Scroll Speed", Float) = 0.1
         _NormalMapScrollSpeed2 ("Normal Map 2 Scroll Speed", Float) = 0.05
 
-        //MoonsLight
+        //Moonlight
         _InverseSqareMultiplier ("Inverse Square Multiplier", Float) = 1
         _LightCutoffDistance ("Light Cutoff Distance", Float) = 100
 
@@ -22,7 +22,7 @@ Shader "DeMuenu/World/Hoppou/Water"
         _F0 ("F0", Range(0,1)) = 0.02
         _FresnelPower ("Fresnel Power", Range(1,8)) = 5
         _ReflectionStrength ("Reflection Strength", Range(0,1)) = 0.7
-        //MoonsLight END
+        //Moonlight END
 
         _WaveInput ("Wave Input", 2D) = "black" {}
         _WaveTex ("Wave Texture", 2D) = "black" {}
@@ -49,10 +49,11 @@ Shader "DeMuenu/World/Hoppou/Water"
             #include "Includes/LightStrength.hlsl"
             #include "Includes/Lambert.hlsl"
             #include "Includes/DefaultSetup.hlsl"
+            #include "Includes/Variables.hlsl"
 
-            //MoonsLight Defines
+            //Moonlight Defines
             #define MAX_LIGHTS 80 // >= maxPlayers in script
-            //MoonsLight Defines END
+            //Moonlight Defines END
 
             struct appdata
             {
@@ -67,10 +68,10 @@ Shader "DeMuenu/World/Hoppou/Water"
                 float2 uvnorm : TEXCOORD1;
                 float4 vertex : SV_POSITION;
 
-                //MoonsLight
+                //Moonlight
                 float3 worldPos : TEXCOORD2;
                 float3 worldNormal: TEXCOORD3;
-                //MoonsLight END
+                //Moonlight END
             };
 
             sampler2D _MainTex;
@@ -84,16 +85,8 @@ Shader "DeMuenu/World/Hoppou/Water"
             float _NormalMapScrollSpeed;
             float _NormalMapScrollSpeed2;
 
-
-            //MoonsLight variables
-            float _InverseSqareMultiplier;
-            float _LightCutoffDistance;            
-
-            float4 _LightPositions[MAX_LIGHTS]; // xyz = position
-            float4 _LightColors[MAX_LIGHTS]; // xyz = position
-            float4 _LightDirections[MAX_LIGHTS]; // xyz = direction, w = cos(halfAngle)
-            float _LightType[MAX_LIGHTS]; // 0 = sphere, 1 = cone
-            float  _PlayerCount;                  // set via SetFloat
+            
+            MoonlightGlobalVariables
 
             //Watershader specific
             float _SpecPower, _SpecIntensity;   
@@ -116,7 +109,7 @@ Shader "DeMuenu/World/Hoppou/Water"
                 float f = pow(saturate(1.0 - NoV), power);
                 return saturate(F0 + (1.0 - F0) * f);
             }
-            //MoonsLight variables END
+            //Moonlight variables END
 
             v2f vert (appdata v)
             {
@@ -124,11 +117,11 @@ Shader "DeMuenu/World/Hoppou/Water"
                 o.vertex = UnityObjectToClipPos(v.vertex);
                 o.uv = TRANSFORM_TEX(v.uv, _MainTex);
                 o.uvnorm = TRANSFORM_TEX(v.uv, _NormalMap);
-                //MoonsLight Vertex
+                //Moonlight Vertex
                 float4 wp = mul(unity_ObjectToWorld, v.vertex);
                 o.worldPos = wp.xyz;
                 o.worldNormal = UnityObjectToWorldNormal(v.normal);
-                //MoonsLight Vertex END
+                //Moonlight Vertex END
                 return o;
             }
 
@@ -151,9 +144,7 @@ Shader "DeMuenu/World/Hoppou/Water"
                 //i.worldPos += float3(0, Wave.g * _WaveScale, 0);
 
 
-                //MoonsLight
-                int count = (int)_PlayerCount;
-
+                //Moonlight
                 float3 N = normalize(i.worldNormal + NormalOffset1 * _NormalMapStrength1 + NormalOffset2 * _NormalMapStrength2 + Wave * _WaveScale); //for lambertian diffuse
 
 
@@ -161,14 +152,9 @@ Shader "DeMuenu/World/Hoppou/Water"
                 float3 V = normalize(_WorldSpaceCameraPos - i.worldPos);
                 float3 R = reflect(-V, N);  //for reflection vector
                 //Waterspecific END
-                //return float4(R,1);
 
-                
+                OutLoopSetup(i, _PlayerCount) //defines count, N, dmax, dIntensity
 
-                
-                // Example: compute distance to nearest player
-                float4 dmax = float4(0,0,0,1);
-                float dIntensity = 0;
                 [loop]
                 for (int LightCounter = 0; LightCounter < MAX_LIGHTS; LightCounter++)
                 {
@@ -201,10 +187,7 @@ Shader "DeMuenu/World/Hoppou/Water"
                 dmax.w = 1.0;
                 dmax.a = dmax.a * _ReflectionStrength * fres;
 
-
-                //MoonsLight END
-
-
+                //Moonlight END
 
                 // Final color
                 return col * _Color * dmax ;

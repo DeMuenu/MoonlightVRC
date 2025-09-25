@@ -12,10 +12,10 @@ Shader "DeMuenu/World/Hoppou/RevealStandart"
         _EmmissiveStrength ("Emmissive Strength", Range(0,10)) = 0
 
         
-        //MoonsLight
+        //Moonlight
         _InverseSqareMultiplier ("Inverse Square Multiplier", Float) = 1
         _LightCutoffDistance ("Light Cutoff Distance", Float) = 100
-        //MoonsLight END
+        //Moonlight END
 
 
 
@@ -35,10 +35,11 @@ Shader "DeMuenu/World/Hoppou/RevealStandart"
             #include "Includes/LightStrength.hlsl"
             #include "Includes/Lambert.hlsl"
             #include "Includes/DefaultSetup.hlsl"
+            #include "Includes/Variables.hlsl"
 
-            //MoonsLight Defines
+            //Moonlight Defines
             #define MAX_LIGHTS 80 // >= maxPlayers in script
-            //MoonsLight Defines END
+            //Moonlight Defines END
 
             struct appdata
             {
@@ -55,11 +56,11 @@ Shader "DeMuenu/World/Hoppou/RevealStandart"
                 //UNITY_FOG_COORDS(1)
                 float4 vertex : SV_POSITION;
 
-                //MoonsLight
+                //Moonlight
                 float3 worldPos : TEXCOORD2;
                 float3 worldNormal: TEXCOORD3;
 
-                //MoonsLight END
+                //Moonlight END
 
                 
             };
@@ -78,16 +79,7 @@ Shader "DeMuenu/World/Hoppou/RevealStandart"
             float _EmmissiveStrength;
 
 
-            //MoonsLight variables
-            float _InverseSqareMultiplier;
-            float _LightCutoffDistance;            
-
-            float4 _LightPositions[MAX_LIGHTS]; // xyz = position
-            float4 _LightColors[MAX_LIGHTS]; // xyz = position
-            float4 _LightDirections[MAX_LIGHTS]; // xyz = direction, w = cos(halfAngle)
-            float _LightType[MAX_LIGHTS]; // 0 = sphere, 1 = cone
-            float  _PlayerCount;                  // set via SetFloat
-            //MoonsLight variables END
+            MoonlightGlobalVariables
 
 
             v2f vert (appdata v)
@@ -99,11 +91,11 @@ Shader "DeMuenu/World/Hoppou/RevealStandart"
                 o.uvEmmis = TRANSFORM_TEX(v.uv, _EmmisiveText);
 
 
-                //MoonsLight Vertex
+                //Moonlight Vertex
                 float4 wp = mul(unity_ObjectToWorld, v.vertex);
                 o.worldPos = wp.xyz;
                 o.worldNormal = UnityObjectToWorldNormal(v.normal);
-                //MoonsLight Vertex END
+                //Moonlight Vertex END
                 
                 return o;
             }
@@ -117,13 +109,11 @@ Shader "DeMuenu/World/Hoppou/RevealStandart"
                 fixed4 emmis = tex2D(_EmmisiveText, i.uvEmmis);
 
 
-                //MoonsLight
-                int count = (int)_PlayerCount;
+                //Moonlight
+                float3 N = normalize(i.worldNormal); /*for lambertian diffuse*/
 
-                float3 N = normalize(i.worldNormal); //for lambertian diffuse
-                // Example: compute distance to nearest player
-                float4 dmax = float4(0,0,0,1);
-                float dIntensity = 0;
+                OutLoopSetup(i, _PlayerCount) //defines count, N, dmax, dIntensity
+
                 [loop]
                 for (int LightCounter = 0; LightCounter < MAX_LIGHTS; LightCounter++)
                 {
@@ -135,22 +125,14 @@ Shader "DeMuenu/World/Hoppou/RevealStandart"
 
                     LightTypeCalculations(_LightColors, LightCounter, i, NdotL, dIntensity, _LightPositions[LightCounter].a, _LightPositions[LightCounter].xyz);
 
-
-
                     dmax = dmax + contrib * float4(LightColor, 1) * NdotL; // accumulate light contributions
-
-                    
-
 
                 }
                 
                 //dmax.xyz = min(dmax * dIntensity, 1.0);
                 dmax.w = 1.0;
-                dmax = dmax;
 
-
-                //MoonsLight END
-
+                //Moonlight END
 
                 return col * _Color * dmax + emmis * _EmmissiveStrength * _EmmissiveColor;
             }

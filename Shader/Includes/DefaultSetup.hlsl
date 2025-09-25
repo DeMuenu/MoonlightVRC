@@ -9,3 +9,11 @@
     
  
 #endif
+
+#ifndef OutLoopSetup
+#define OutLoopSetup(i, _PlayerCount) \
+    int count = (int)_PlayerCount; \
+    \
+    float4 dmax = float4(0,0,0,1); \
+    float dIntensity = 0; \
+#endif
