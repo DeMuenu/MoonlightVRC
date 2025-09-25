@@ -23,6 +23,14 @@ Shader "DeMuenu/World/Hoppou/Water"
         _FresnelPower ("Fresnel Power", Range(1,8)) = 5
         _ReflectionStrength ("Reflection Strength", Range(0,1)) = 0.7
         //MoonsLight END
+
+        _WaveInput ("Wave Input", 2D) = "black" {}
+        _WaveTex ("Wave Texture", 2D) = "black" {}
+        _CameraScale ("Camera Scale", Float) = 15
+        _CameraPositionZ ("Camera Position Z", Float) = 0
+        _CameraPositionX ("Camera Position X", Float) = 0
+
+        _WaveScale ("Wave Scale", Range(0.001, 100)) = 1
     }
     SubShader
     {
@@ -38,6 +46,9 @@ Shader "DeMuenu/World/Hoppou/Water"
             #pragma fragment frag
 
             #include "UnityCG.cginc"
+            #include "Includes/LightStrength.hlsl"
+            #include "Includes/Lambert.hlsl"
+            #include "Includes/DefaultSetup.hlsl"
 
             //MoonsLight Defines
             #define MAX_LIGHTS 80 // >= maxPlayers in script
@@ -88,6 +99,15 @@ Shader "DeMuenu/World/Hoppou/Water"
             float _SpecPower, _SpecIntensity;   
             float3 _AmbientFloor;
 
+            sampler2D _WaveInput; 
+            sampler2D _WaveTex;
+            float2 _WaveTex_ST;
+            float _CameraScale;
+            float _CameraPositionZ;
+            float _CameraPositionX;
+            float _WaveScale;
+            //Watershader specific END
+
 
             float _F0, _FresnelPower, _ReflectionStrength;
 
@@ -121,10 +141,20 @@ Shader "DeMuenu/World/Hoppou/Water"
                 float3 NormalOffset1 = UnpackNormal(norm).xyz;
                 float3 NormalOffset2 = UnpackNormal(norm2).xyz;
 
+                float2 waveUV = float2(_CameraPositionX - i.worldPos.x, _CameraPositionZ - i.worldPos.z) / _CameraScale / 2 + 0.5;
+                fixed4 Wave = tex2D(_WaveInput, waveUV);
+                if ((waveUV.x < 0.1) || (waveUV.x > 0.9) || (waveUV.y < 0.1) || (waveUV.y > 0.9)){
+                    Wave = float4(0,0,0,0);
+                }
+                
+                //i.vertex += float4(0, Wave.g * _WaveScale, 0, 0);
+                //i.worldPos += float3(0, Wave.g * _WaveScale, 0);
+
+
                 //MoonsLight
                 int count = (int)_PlayerCount;
 
-                float3 N = normalize(i.worldNormal + NormalOffset1 * _NormalMapStrength1 + NormalOffset2 * _NormalMapStrength2); //for lambertian diffuse
+                float3 N = normalize(i.worldNormal + NormalOffset1 * _NormalMapStrength1 + NormalOffset2 * _NormalMapStrength2 + Wave * _WaveScale); //for lambertian diffuse
 
 
                 //Waterspecific
@@ -140,53 +170,22 @@ Shader "DeMuenu/World/Hoppou/Water"
                 float4 dmax = float4(0,0,0,1);
                 float dIntensity = 0;
                 [loop]
-                for (int idx = 0; idx < MAX_LIGHTS; idx++)
+                for (int LightCounter = 0; LightCounter < MAX_LIGHTS; LightCounter++)
                 {
-                    if (idx >= count) break;
-                    float radius = _LightPositions[idx].a;
-                    float3 q = _LightPositions[idx].xyz;
-
-                    float distanceFromLight = length(i.worldPos - q);
-                    if (distanceFromLight > _LightCutoffDistance) continue;
+                    InLoopSetup(_LightPositions, LightCounter, count, i); //defines distanceFromLight, contrib
                     
-                    float sd = 0.0;
-                    float contrib = 0.0;
-                    
+                    Lambert(_LightPositions[LightCounter].xyz ,i, N);
 
-                    float invSqMul = max(1e-4, _InverseSqareMultiplier);
-                    
+                    LightTypeCalculations(_LightColors, LightCounter, i, NdotL, dIntensity, _LightPositions[LightCounter].a, _LightPositions[LightCounter].xyz);
 
-                    //Lambertian diffuse
-                    float3 L = normalize(q - i.worldPos);   // q = light position
-                    float  NdotL = saturate(dot(N, L) * 0.5 + 0.5);      // one-sided Lambert
-                    if (NdotL <= 0) continue;
 
-                    if(_LightType[idx] == 0)
-                    {
-                        float invSq    = _LightColors[idx].a / max(1e-4, max(0, max(1, distanceFromLight - radius) * invSqMul) * max(0, max(1, distanceFromLight - radius) * invSqMul));
-                        contrib  = invSq;
-                        //contrib = contrib * step(-distance(i.worldPos, q), -1 + radius * 1); // 0 if outside sphere
-                        dIntensity += contrib * NdotL;
-                    }
-                    else if (_LightType[idx] == 1)
-                    {
-                        float invSq    = _LightColors[idx].a / max(1e-4, (distanceFromLight * invSqMul) * (distanceFromLight * invSqMul));
-                        float threshold = (-1 + _LightDirections[idx].w / 180);
-                        
-                        contrib = min(dot(normalize(i.worldPos - q), -normalize(_LightDirections[idx].xyz)), 0);
-                        contrib= 1 - step(threshold, contrib);
-                        
-                        contrib = contrib * invSq;
-                        dIntensity += contrib * NdotL;
-                    }
-                    float3 LightColor = _LightColors[idx].xyz; // * NormalDirMult;
 
                     //Watershader specific
                     //float fres = Schlick(saturate(dot(N, V)), _F0, _FresnelPower);
                     float3 R = reflect(-V, N);
                     float  spec = pow(saturate(dot(R, L)), _SpecPower);
                     //return float4(spec, spec, spec,1);
-                    dmax.rgb += _LightColors[idx].rgb * contrib + _LightColors[idx].rgb * _SpecIntensity * spec * contrib;
+                    dmax.rgb += _LightColors[LightCounter].rgb * contrib + _LightColors[LightCounter].rgb * _SpecIntensity * spec * contrib;
                     dmax.a -=  _SpecIntensity * spec;
                     //dmax = dmax + contrib * float4(LightColor, 1); // accumulate light contributions
 

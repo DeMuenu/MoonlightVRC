@@ -1,5 +1,7 @@
 #ifndef LightTypeCalculations
 #define LightTypeCalculations(_LightColors ,LightCounter, i, NdotL, dIntensity, radius, Lightposition) \
+    float invSqMul = max(1e-4, _InverseSqareMultiplier); \
+    \
     if(_LightType[LightCounter] == 0) \
     { \
         contrib = _LightColors[LightCounter].a / max(1e-4, max(0, max(1, distanceFromLight - radius) * invSqMul) * max(0, max(1, distanceFromLight - radius) * invSqMul)); \

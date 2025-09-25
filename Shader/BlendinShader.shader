@@ -33,6 +33,8 @@ Shader "DeMuenu/World/Hoppou/RevealStandart"
 
             #include "UnityCG.cginc"
             #include "Includes/LightStrength.hlsl"
+            #include "Includes/Lambert.hlsl"
+            #include "Includes/DefaultSetup.hlsl"
 
             //MoonsLight Defines
             #define MAX_LIGHTS 80 // >= maxPlayers in script
@@ -125,23 +127,11 @@ Shader "DeMuenu/World/Hoppou/RevealStandart"
                 [loop]
                 for (int LightCounter = 0; LightCounter < MAX_LIGHTS; LightCounter++)
                 {
-                    if (LightCounter >= count) break;
-                    float3 Lightposition = _LightPositions[LightCounter].xyz;
+                    InLoopSetup(_LightPositions, LightCounter, count, i); //defines distanceFromLight, contrib
 
-                    float distanceFromLight = length(i.worldPos - Lightposition);
-                    if (distanceFromLight > _LightCutoffDistance) continue;
                     
-                    float sd = 0.0;
-                    float contrib = 0.0;
-                    
-
-                    float invSqMul = max(1e-4, _InverseSqareMultiplier);
-                    
-
                     //Lambertian diffuse
-                    float3 L = normalize(Lightposition - i.worldPos);   // Lightposition = light position
-                    float  NdotL = saturate(dot(N, L) * 0.5 + 0.5);      // one-sided Lambert
-                    if (NdotL <= 0) continue;
+                    Lambert(_LightPositions[LightCounter].xyz ,i, N); //defines NdotL
 
                     LightTypeCalculations(_LightColors, LightCounter, i, NdotL, dIntensity, _LightPositions[LightCounter].a, _LightPositions[LightCounter].xyz);
 
