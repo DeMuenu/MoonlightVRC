@@ -37,7 +37,7 @@ On PC, I haven't encountered any frame drops in the editor at all, even with 400
 3. For lights, attach `LightdataStorage` to a Transform and configure:
    - `range`, `type`, `color`, `intensity`, and `spotAngleDeg`.
 
-4. Use the provided shader include `Shader/MoonsLight.cginc` in your CGPROGRAM blocks to consume the arrays and compute lighting.
+4. Use one of the premade shaders on your objects. Or if you feel like it, use the provided .hlsl in your own shader. You just need to copy everything surrounded by Moonlight comments, and applying it at the end of your shader.
 
 ---
 
