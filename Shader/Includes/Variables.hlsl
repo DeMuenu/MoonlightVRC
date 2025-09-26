@@ -10,4 +10,5 @@
     float _LightType[MAX_LIGHTS]; /* 0 = sphere, 1 = cone */ \
     float  _PlayerCount;                  /* set via SetFloat */ \
      \
+     
 #endif

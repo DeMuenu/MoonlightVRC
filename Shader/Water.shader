@@ -146,7 +146,7 @@ Shader "DeMuenu/World/Hoppou/Water"
 
                 //Moonlight
                 float3 N = normalize(i.worldNormal + NormalOffset1 * _NormalMapStrength1 + NormalOffset2 * _NormalMapStrength2 + Wave * _WaveScale); //for lambertian diffuse
-
+                
 
                 //Waterspecific
                 float3 V = normalize(_WorldSpaceCameraPos - i.worldPos);
@@ -162,7 +162,7 @@ Shader "DeMuenu/World/Hoppou/Water"
                     
                     Lambert(_LightPositions[LightCounter].xyz ,i, N);
 
-                    LightTypeCalculations(_LightColors, LightCounter, i, NdotL, dIntensity, _LightPositions[LightCounter].a, _LightPositions[LightCounter].xyz);
+                    LightTypeCalculations(_LightColors, LightCounter, i, 1, dIntensity, _LightPositions[LightCounter].a, _LightPositions[LightCounter].xyz);
 
 
 
@@ -185,7 +185,7 @@ Shader "DeMuenu/World/Hoppou/Water"
                 float  fres  = SchlickFresnel(NoV, _F0, _FresnelPower);
 
                 dmax.w = 1.0;
-                dmax.a = dmax.a * _ReflectionStrength * fres;
+                dmax.a = dmax.a * _ReflectionStrength * fres; 
 
                 //Moonlight END
 
