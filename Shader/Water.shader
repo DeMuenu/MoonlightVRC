@@ -153,16 +153,16 @@ Shader "DeMuenu/World/Hoppou/Water"
                 float3 R = reflect(-V, N);  //for reflection vector
                 //Waterspecific END
 
-                OutLoopSetup(i, _PlayerCount) //defines count, N, dmax, dIntensity
+                OutLoopSetup(i, _Udon_PlayerCount) //defines count, N, dmax, dIntensity
 
                 [loop]
                 for (int LightCounter = 0; LightCounter < MAX_LIGHTS; LightCounter++)
                 {
-                    InLoopSetup(_LightPositions, LightCounter, count, i); //defines distanceFromLight, contrib
+                    InLoopSetup(_Udon_LightPositions, LightCounter, count, i); //defines distanceFromLight, contrib
                     
-                    Lambert(_LightPositions[LightCounter].xyz ,i, N);
+                    Lambert(_Udon_LightPositions[LightCounter].xyz ,i, N);
 
-                    LightTypeCalculations(_LightColors, LightCounter, i, 1, dIntensity, _LightPositions[LightCounter].a, _LightPositions[LightCounter].xyz);
+                    LightTypeCalculations(_Udon_LightColors, LightCounter, i, 1, dIntensity, _Udon_LightPositions[LightCounter].a, _Udon_LightPositions[LightCounter].xyz);
 
 
 
@@ -171,7 +171,7 @@ Shader "DeMuenu/World/Hoppou/Water"
                     float3 R = reflect(-V, N);
                     float  spec = pow(saturate(dot(R, L)), _SpecPower);
                     //return float4(spec, spec, spec,1);
-                    dmax.rgb += _LightColors[LightCounter].rgb * contrib + _LightColors[LightCounter].rgb * _SpecIntensity * spec * contrib;
+                    dmax.rgb += _Udon_LightColors[LightCounter].rgb * contrib + _Udon_LightColors[LightCounter].rgb * _SpecIntensity * spec * contrib;
                     dmax.a -=  _SpecIntensity * spec;
                     //dmax = dmax + contrib * float4(LightColor, 1); // accumulate light contributions
 

@@ -106,17 +106,17 @@ Shader "DeMuenu/World/Hoppou/Particles/LitParticles"
                 //Moonlight
                 float3 N = normalize(i.worldNormal); /*for lambertian diffuse*/
 
-                OutLoopSetup(i, _PlayerCount) //defines count, N, dmax, dIntensity
+                OutLoopSetup(i, _Udon_PlayerCount) //defines count, N, dmax, dIntensity
                 
                 [loop]
                 for (int LightCounter = 0; LightCounter < MAX_LIGHTS; LightCounter++)
                 {
 
-                    InLoopSetup(_LightPositions, LightCounter, count, i); //defines distanceFromLight, contrib
+                    InLoopSetup(_Udon_LightPositions, LightCounter, count, i); //defines distanceFromLight, contrib
 
-                    Lambert(_LightPositions[LightCounter].xyz ,i, N); //defines NdotL
+                    Lambert(_Udon_LightPositions[LightCounter].xyz ,i, N); //defines NdotL
 
-                    LightTypeCalculations(_LightColors, LightCounter, i, NdotL, dIntensity, _LightPositions[LightCounter].a, _LightPositions[LightCounter].xyz);
+                    LightTypeCalculations(_Udon_LightColors, LightCounter, i, NdotL, dIntensity, _Udon_LightPositions[LightCounter].a, _Udon_LightPositions[LightCounter].xyz);
 
                     dmax = dmax + contrib * float4(LightColor, 1) * NdotL; // accumulate light contributions
 

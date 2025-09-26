@@ -67,11 +67,11 @@ public partial class PlayerPositionsToShader : UdonSharpBehaviour
 
     private float _nextUpdate = 0f;
 
-    private static readonly int UdonID_PlayerPositions;
-    private static readonly int UdonID_LightCount;
-    private static readonly int UdonID_LightColors;
-    private static readonly int UdonID_LightDirections;
-    private static readonly int UdonID_LightType;
+    private int UdonID_PlayerPositions;
+    private int UdonID_LightCount;
+    private int UdonID_LightColors;
+    private int UdonID_LightDirections;
+    private int UdonID_LightType;
 
     void Start()
     {
