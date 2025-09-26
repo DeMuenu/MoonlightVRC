@@ -6,10 +6,10 @@ Shader "DeMuenu/World/Hoppou/Particles/LitParticles"
         _Color ("Color", Color) = (1,1,1,1)
 
         
-        //MoonsLight
+        //Moonlight
         _InverseSqareMultiplier ("Inverse Square Multiplier", Float) = 1
         _LightCutoffDistance ("Light Cutoff Distance", Float) = 100
-        //MoonsLight END
+        //Moonlight END
 
 
 
@@ -32,6 +32,10 @@ Shader "DeMuenu/World/Hoppou/Particles/LitParticles"
             #define MAX_LIGHTS 80 // >= maxPlayers in script
 
             #include "UnityCG.cginc"
+            #include "Includes/LightStrength.hlsl"
+            #include "Includes/Lambert.hlsl"
+            #include "Includes/DefaultSetup.hlsl"
+            #include "Includes/Variables.hlsl"
 
 
 
@@ -50,13 +54,13 @@ Shader "DeMuenu/World/Hoppou/Particles/LitParticles"
             {
                 float2 uv : TEXCOORD0;
                 float4 vertex : SV_POSITION;
-                //MoonsLight
+                //Moonlight
                 float3 worldPos : TEXCOORD2;
 
                 float4 color : COLOR;
 
                 float3 worldNormal: TEXCOORD3;
-                //MoonsLight END
+                //Moonlight END
             };
 
             sampler2D _MainTex;
@@ -72,16 +76,7 @@ Shader "DeMuenu/World/Hoppou/Particles/LitParticles"
             float _EmmissiveStrength;
 
 
-            //MoonsLight
-            float _InverseSqareMultiplier;
-            float _LightCutoffDistance;            
-            
-            float4 _LightPositions[MAX_LIGHTS]; // xyz = position
-            float4 _LightColors[MAX_LIGHTS]; // xyz = position
-            float4 _LightDirections[MAX_LIGHTS]; // xyz = direction, w = cos(halfAngle)
-            float _LightType[MAX_LIGHTS]; // 0 = sphere, 1 = cone
-            float  _PlayerCount;                  // set via SetFloat
-            //MoonsLight END
+            MoonlightGlobalVariables
 
 
             v2f vert (appdata v)
@@ -91,12 +86,12 @@ Shader "DeMuenu/World/Hoppou/Particles/LitParticles"
                 o.uv = TRANSFORM_TEX(v.uv, _MainTex);
 
 
-                //MoonsLight
+                //Moonlight
                 float4 wp = mul(unity_ObjectToWorld, v.vertex);
                 o.worldPos = wp.xyz;
                 o.color = v.color;
                 o.worldNormal = UnityObjectToWorldNormal(v.normal);
-                //MoonsLight END
+                //Moonlight END
                 
 
                 return o;
@@ -108,72 +103,29 @@ Shader "DeMuenu/World/Hoppou/Particles/LitParticles"
                 fixed4 col = tex2D(_MainTex, i.uv);
 
 
-                //MoonsLight
-                int count = (int)_PlayerCount;
+                //Moonlight
+                float3 N = normalize(i.worldNormal); /*for lambertian diffuse*/
 
-                float3 N = normalize(i.worldNormal); //for lambertian diffuse
-                // Example: compute distance to nearest player
-                float4 dmax = float4(0,0,0,1);
-                float dIntensity = 0;
+                OutLoopSetup(i, _PlayerCount) //defines count, N, dmax, dIntensity
+                
                 [loop]
-                for (int idx = 0; idx < MAX_LIGHTS; idx++)
+                for (int LightCounter = 0; LightCounter < MAX_LIGHTS; LightCounter++)
                 {
-                    if (idx >= count) break;
-                    float radius = _LightPositions[idx].a;
-                    float3 q = _LightPositions[idx].xyz;
 
-                    float distanceFromLight = length(i.worldPos - q);
-                    if (distanceFromLight > _LightCutoffDistance) continue;
-                    
-                    float sd = 0.0;
-                    float contrib = 0.0;
-                    
+                    InLoopSetup(_LightPositions, LightCounter, count, i); //defines distanceFromLight, contrib
 
-                    float invSqMul = max(1e-4, _InverseSqareMultiplier);
-                    
+                    Lambert(_LightPositions[LightCounter].xyz ,i, N); //defines NdotL
 
-                    //Lambertian diffuse
-                    float3 L = normalize(q - i.worldPos);   // q = light position
-                    float  NdotL = saturate(dot(N, L) * 0.5 + 0.5);      // one-sided Lambert
-                    if (NdotL <= 0) continue;
-
-                    if(_LightType[idx] == 0)
-                    {
-                        float invSq    = _LightColors[idx].a / max(1e-4, max(0, max(1, distanceFromLight - radius) * invSqMul) * max(0, max(1, distanceFromLight - radius) * invSqMul));
-                        contrib  = invSq;
-                        //contrib = contrib * step(-distance(i.worldPos, q), -1 + radius * 1); // 0 if outside sphere
-                        dIntensity += contrib * NdotL;
-                    }
-                    else if (_LightType[idx] == 1)
-                    {
-                        float invSq    = _LightColors[idx].a / max(1e-4, (distanceFromLight * invSqMul) * (distanceFromLight * invSqMul));
-                        float threshold = (-1 + _LightDirections[idx].w / 180);
-                        
-                        contrib = min(dot(normalize(i.worldPos - q), -normalize(_LightDirections[idx].xyz)), 0);
-                        contrib= 1 - step(threshold, contrib);
-                        
-                        contrib = contrib * invSq;
-                        dIntensity += contrib * NdotL;
-                    }
-                    float3 LightColor = _LightColors[idx].xyz; // * NormalDirMult;
-
-
+                    LightTypeCalculations(_LightColors, LightCounter, i, NdotL, dIntensity, _LightPositions[LightCounter].a, _LightPositions[LightCounter].xyz);
 
                     dmax = dmax + contrib * float4(LightColor, 1) * NdotL; // accumulate light contributions
-
-                    
-
 
                 }
                 
                 //dmax.xyz = min(dmax * dIntensity, 1.0);
                 dmax.w = 1.0;
-                dmax = dmax;
 
-
-                //MoonsLight END
-
-
+                //Moonlight END
 
                 return col * _Color * min(dmax, 1.0) * i.color;
 
