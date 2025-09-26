@@ -4,6 +4,7 @@ using Unity.Mathematics;
 using UnityEngine;
 using VRC.SDKBase;
 using VRC.Udon;
+using VRC.SDK3.Rendering;
 
 public partial class PlayerPositionsToShader : UdonSharpBehaviour 
 {
@@ -28,19 +29,19 @@ public partial class PlayerPositionsToShader : UdonSharpBehaviour
 
     [Header("Shader property names (advanced users)")]
     [Tooltip("Vector4 array: xyz = position, w = range")]
-    public string positionsProperty = "_PlayerPositions";
+    public string positionsProperty = "_Udon_PlayerPositions";
 
     [Tooltip("Actual array count")]
-    public string countProperty = "_PlayerCount";
+    public string countProperty = "_Udon_PlayerCount";
 
     [Tooltip("RGBA array: rgb = color, a = intensity")]
-    public string colorProperty = "_LightColors";
+    public string colorProperty = "_Udon_LightColors";
 
     [Tooltip("Vector4 array: xyz = direction, w = spot in degrees")]
-    public string directionsProperty = "_LightDirections";
+    public string directionsProperty = "_Udon_LightDirections";
 
     [Tooltip("float array: light type (1=area, 2=cone, etc)")]
-    public string typeProperty = "_LightType";
+    public string typeProperty = "_Udon_LightType";
 
     [Header("Max Lights (advanced users)")]
     [Tooltip("Hard cap / array size. 80 = default cap")]
@@ -64,6 +65,14 @@ public partial class PlayerPositionsToShader : UdonSharpBehaviour
 
     public int currentCount { get; private set; }
 
+    private float _nextUpdate = 0f;
+
+    private static readonly int UdonID_PlayerPositions;
+    private static readonly int UdonID_LightCount;
+    private static readonly int UdonID_LightColors;
+    private static readonly int UdonID_LightDirections;
+    private static readonly int UdonID_LightType;
+
     void Start()
     {
         if (maxLights < 1) maxLights = 1;
@@ -76,12 +85,22 @@ public partial class PlayerPositionsToShader : UdonSharpBehaviour
         _players = new VRCPlayerApi[maxLights];
         _mpb = new MaterialPropertyBlock();
 
+        UdonID_PlayerPositions = VRCShader.PropertyToID(positionsProperty);
+        UdonID_LightCount = VRCShader.PropertyToID(countProperty);
+        UdonID_LightColors = VRCShader.PropertyToID(colorProperty);
+        UdonID_LightDirections = VRCShader.PropertyToID(directionsProperty);
+        UdonID_LightType = VRCShader.PropertyToID(typeProperty);
+
+
         UpdateData();
         PushToRenderers();
     }
 
     void LateUpdate()
     {
+        if (Time.time < _nextUpdate) return;
+        _nextUpdate = Time.time + 0.05f;
+
         UpdateData();
         PushToRenderers();
     }
@@ -260,15 +279,12 @@ public partial class PlayerPositionsToShader : UdonSharpBehaviour
             Renderer rd = targets[r];
             if (!Utilities.IsValid(rd)) continue;
 
-            rd.GetPropertyBlock(_mpb);
+            if (pushPositions) VRCShader.SetGlobalVectorArray(UdonID_PlayerPositions, _positions);
+            if (pushColors)    VRCShader.SetGlobalVectorArray(UdonID_LightColors,    _lightColors);
+            if (pushDirs)      VRCShader.SetGlobalVectorArray(UdonID_LightDirections, _directions);
+            if (pushTypes)     _mpb.SetFloatArray(UdonID_LightType, _TypeArray);
 
-            if (pushPositions) _mpb.SetVectorArray(positionsProperty, _positions);
-            if (pushColors)    _mpb.SetVectorArray(colorProperty,    _lightColors);
-            if (pushDirs)      _mpb.SetVectorArray(directionsProperty, _directions);
-            if (pushTypes)     _mpb.SetFloatArray(typeProperty, _TypeArray);
-
-            _mpb.SetFloat(countProperty, currentCount);
-            rd.SetPropertyBlock(_mpb);
+            VRCShader.SetGlobalFloat(UdonID_LightCount, currentCount);
         }
 
         // Only now mark them clean
