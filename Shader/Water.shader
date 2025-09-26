@@ -11,6 +11,8 @@ Shader "DeMuenu/World/Hoppou/Water"
         _NormalMapScrollSpeed ("Normal Map Scroll Speed", Float) = 0.1
         _NormalMapScrollSpeed2 ("Normal Map 2 Scroll Speed", Float) = 0.05
 
+        _MinTransparency ("Min Transparency", Range(0,1)) = 0
+
         //Moonlight
         _InverseSqareMultiplier ("Inverse Square Multiplier", Float) = 1
         _LightCutoffDistance ("Light Cutoff Distance", Float) = 100
@@ -25,12 +27,11 @@ Shader "DeMuenu/World/Hoppou/Water"
         //Moonlight END
 
         _WaveInput ("Wave Input", 2D) = "black" {}
-        _WaveTex ("Wave Texture", 2D) = "black" {}
         _CameraScale ("Camera Scale", Float) = 15
         _CameraPositionZ ("Camera Position Z", Float) = 0
         _CameraPositionX ("Camera Position X", Float) = 0
-
-        _WaveScale ("Wave Scale", Range(0.001, 100)) = 1
+        _WaveScale ("Wave Scale", Range(0.001, 2)) = 1
+        _WaveColor ("Wave Color", Color) = (1,1,1,1)
     }
     SubShader
     {
@@ -84,6 +85,7 @@ Shader "DeMuenu/World/Hoppou/Water"
             float _NormalMap2Tiling;
             float _NormalMapScrollSpeed;
             float _NormalMapScrollSpeed2;
+            float _MinTransparency;
 
             
             MoonlightGlobalVariables
@@ -99,6 +101,7 @@ Shader "DeMuenu/World/Hoppou/Water"
             float _CameraPositionZ;
             float _CameraPositionX;
             float _WaveScale;
+            float4 _WaveColor;
             //Watershader specific END
 
 
@@ -134,18 +137,10 @@ Shader "DeMuenu/World/Hoppou/Water"
                 float3 NormalOffset1 = UnpackNormal(norm).xyz;
                 float3 NormalOffset2 = UnpackNormal(norm2).xyz;
 
-                float2 waveUV = float2(_CameraPositionX - i.worldPos.x, _CameraPositionZ - i.worldPos.z) / _CameraScale / 2 + 0.5;
-                fixed4 Wave = tex2D(_WaveInput, waveUV);
-                if ((waveUV.x < 0.1) || (waveUV.x > 0.9) || (waveUV.y < 0.1) || (waveUV.y > 0.9)){
-                    Wave = float4(0,0,0,0);
-                }
-                
-                //i.vertex += float4(0, Wave.g * _WaveScale, 0, 0);
-                //i.worldPos += float3(0, Wave.g * _WaveScale, 0);
 
 
                 //Moonlight
-                float3 N = normalize(i.worldNormal + NormalOffset1 * _NormalMapStrength1 + NormalOffset2 * _NormalMapStrength2 + Wave * _WaveScale); //for lambertian diffuse
+                float3 N = normalize(i.worldNormal + NormalOffset1 * _NormalMapStrength1 + NormalOffset2 * _NormalMapStrength2); //for lambertian diffuse
                 
 
                 //Waterspecific
@@ -188,9 +183,33 @@ Shader "DeMuenu/World/Hoppou/Water"
                 dmax.a = dmax.a * _ReflectionStrength * fres; 
 
                 //Moonlight END
+                float4 finalColor = col * _Color * dmax;
 
+                float2 waveUV = float2(_CameraPositionX - i.worldPos.x, _CameraPositionZ - i.worldPos.z) / _CameraScale / 2 + 0.5;
+                fixed4 Wave = tex2D(_WaveInput, waveUV);
+                if ((waveUV.x < 0.1) || (waveUV.x > 0.9) || (waveUV.y < 0.1) || (waveUV.y > 0.9)){
+                    Wave = float4(0,0,0,0);
+                }
+                Wave.a = Wave.r;
+                Wave *= dmax;
+
+                float2 camXZ = float2(_CameraPositionX, _CameraPositionZ);
+                float2 posXZ = float2(i.worldPos.x, i.worldPos.z);
+
+                float dist = distance(posXZ, camXZ);
+
+                float distFade = 1.0 - smoothstep(0, _CameraScale, dist);
+
+                float4 waveCol = Wave * _WaveScale * _WaveColor;
+
+                float k = saturate(1 * distFade);
+                
+                float4 outCol = finalColor;
+                outCol.rgb = lerp(outCol.rgb, waveCol.rgb, k);
+
+                outCol.a = max(outCol.a, _MinTransparency);
+                return outCol;
                 // Final color
-                return col * _Color * dmax ;
             }
             ENDCG
         }

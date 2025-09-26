@@ -9,7 +9,6 @@ public static class PlayerPositionsToShaderPreview
 {
     const double kTickInterval = 0.1; // seconds
     static double _nextTick;
-    static readonly MaterialPropertyBlock _mpb = new MaterialPropertyBlock();
     static readonly Dictionary<PlayerPositionsToShader, Cache> _cache = new Dictionary<PlayerPositionsToShader, Cache>();
 
     struct Cache
@@ -47,7 +46,7 @@ public static class PlayerPositionsToShaderPreview
         {
             if (b == null || !b.isActiveAndEnabled) continue;
             if (EditorUtility.IsPersistent(b)) continue; // skip assets
-            PushFromUdonBehaviour(b);
+            PushFromBehaviour(b);
         }
 
         SceneView.RepaintAll();
@@ -82,7 +81,7 @@ public static class PlayerPositionsToShaderPreview
         }
     }
 
-    static void PushFromUdonBehaviour(PlayerPositionsToShader src)
+    static void PushFromBehaviour(PlayerPositionsToShader src)
     {
         int max = Mathf.Max(1, src.maxLights);
         EnsureArrays(src, max);
@@ -93,6 +92,7 @@ public static class PlayerPositionsToShaderPreview
         var directions = c.directions;
         var types      = c.types;
 
+        // Clear arrays to safe defaults
         for (int i = 0; i < max; i++)
         {
             positions[i]  = Vector4.zero;
@@ -101,36 +101,61 @@ public static class PlayerPositionsToShaderPreview
             types[i]      = 0f;
         }
 
-        // 🔗 Use the Editor-side function defined on the partial class
+        // Use the Editor-side function defined on the partial class
         int count = 0;
         try
         {
             src.Editor_BuildPreview(out positions, out colors, out directions, out types, out count);
+
             // replace cache arrays if sizes changed
-            if (positions.Length != c.size) EnsureArrays(src, positions.Length);
-            _cache[src] = new Cache { positions = positions, colors = colors, directions = directions, types = types, size = positions.Length };
+            if (positions.Length != c.size)
+                EnsureArrays(src, positions.Length);
+
+            _cache[src] = new Cache
+            {
+                positions  = positions,
+                colors     = colors,
+                directions = directions,
+                types      = types,
+                size       = positions.Length
+            };
         }
         catch
         {
-            // Ultra-safe fallback: nothing to push if the method signature changes unexpectedly
+            // Fallback: nothing to push if the method signature changes unexpectedly
             count = 0;
         }
 
-        var rds = src.targets ?? System.Array.Empty<Renderer>();
-        for (int r = 0; r < rds.Length; r++)
+        // Mirror runtime: push as GLOBAL shader properties
+        // Resolve property IDs only if names are provided
+        if (!string.IsNullOrEmpty(src.positionsProperty))
         {
-            var rd = rds[r];
-            if (rd == null) continue;
+            int id = Shader.PropertyToID(src.positionsProperty);
+            Shader.SetGlobalVectorArray(id, positions);
+        }
 
-            rd.GetPropertyBlock(_mpb);
+        if (!string.IsNullOrEmpty(src.colorProperty))
+        {
+            int id = Shader.PropertyToID(src.colorProperty);
+            Shader.SetGlobalVectorArray(id, colors);
+        }
 
-            if (!string.IsNullOrEmpty(src.positionsProperty))   _mpb.SetVectorArray(src.positionsProperty,   positions);
-            if (!string.IsNullOrEmpty(src.colorProperty))       _mpb.SetVectorArray(src.colorProperty,       colors);
-            if (!string.IsNullOrEmpty(src.directionsProperty))  _mpb.SetVectorArray(src.directionsProperty,  directions);
-            if (!string.IsNullOrEmpty(src.typeProperty))        _mpb.SetFloatArray (src.typeProperty,        types);
-            if (!string.IsNullOrEmpty(src.countProperty))       _mpb.SetFloat      (src.countProperty,       count);
+        if (!string.IsNullOrEmpty(src.directionsProperty))
+        {
+            int id = Shader.PropertyToID(src.directionsProperty);
+            Shader.SetGlobalVectorArray(id, directions);
+        }
 
-            rd.SetPropertyBlock(_mpb);
+        if (!string.IsNullOrEmpty(src.typeProperty))
+        {
+            int id = Shader.PropertyToID(src.typeProperty);
+            Shader.SetGlobalFloatArray(id, types);
+        }
+
+        if (!string.IsNullOrEmpty(src.countProperty))
+        {
+            int id = Shader.PropertyToID(src.countProperty);
+            Shader.SetGlobalFloat(id, count);
         }
     }
 }
@@ -145,7 +170,7 @@ public class PlayerPositionsToShaderInspector : Editor
         using (new EditorGUI.DisabledScope(true))
         {
             EditorGUILayout.LabelField("Edit-Mode Preview", EditorStyles.boldLabel);
-            EditorGUILayout.LabelField("Updates ~10×/s using \"Other Transforms\" as emitters.");
+            EditorGUILayout.LabelField("Updates ~10×/s using players and Other Light Sources.");
         }
 
         if (GUILayout.Button("Refresh Now"))

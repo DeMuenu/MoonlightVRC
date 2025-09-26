@@ -3,13 +3,12 @@ Shader "DeMuenu/World/Hoppou/WaterParticle"
     Properties
     {
         _MainTex ("Texture", 2D) = "white" {}
-        _AlphaMap ("Alpha Map", 2D) = "white" {}
         _Color ("Tint", Color) = (1,1,1,1)
     }
     SubShader
     {
         Tags { "Queue"="Transparent" "IgnoreProjector"="True" "RenderType"="Transparent" "PreviewType"="Plane" }
-        Blend SrcAlpha OneMinusSrcAlpha   // normal alpha blend (not additive)
+        Blend One One
         ZWrite Off
         Lighting Off
         Cull Off
@@ -38,7 +37,6 @@ Shader "DeMuenu/World/Hoppou/WaterParticle"
 
             sampler2D _MainTex;
             float4 _MainTex_ST;
-            sampler2D _AlphaMap;
             fixed4 _Color;
 
             v2f vert (appdata v)
@@ -53,8 +51,7 @@ Shader "DeMuenu/World/Hoppou/WaterParticle"
             fixed4 frag (v2f i) : SV_Target
             {
                 fixed4 col = tex2D(_MainTex, i.uv) * _Color;
-                float alpha = tex2D(_AlphaMap, i.uv).r;
-                return col * alpha * i.color;  // col.a drives the blend
+                return col * i.color;  // col.a drives the blend
             }
             ENDCG
         }

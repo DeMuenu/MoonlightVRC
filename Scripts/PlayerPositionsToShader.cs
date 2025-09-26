@@ -12,8 +12,6 @@ public partial class PlayerPositionsToShader : UdonSharpBehaviour
     [Tooltip("Place Transforms here which should also emit Light (attach LightdataStorage to them).")]
     public Transform[] otherLightSources; 
 
-    [Header("Renderers that use a supported shader")]
-    public Renderer[] targets; 
 
     [Header("Strength")]
     [Tooltip("Local player light range")]
@@ -99,7 +97,7 @@ public partial class PlayerPositionsToShader : UdonSharpBehaviour
     void LateUpdate()
     {
         if (Time.time < _nextUpdate) return;
-        _nextUpdate = Time.time + 0.05f;
+        _nextUpdate = Time.time + 0.025f;
 
         UpdateData();
         PushToRenderers();
@@ -266,7 +264,6 @@ public partial class PlayerPositionsToShader : UdonSharpBehaviour
 
     private void PushToRenderers()
     {
-        if (targets == null || targets.Length == 0) return;
 
         // Snapshot which things are dirty this frame
         bool pushPositions = _positons_isDirty;
@@ -274,23 +271,19 @@ public partial class PlayerPositionsToShader : UdonSharpBehaviour
         bool pushDirs      = _directions_isDirty;
         bool pushTypes     = _TypeArray_isDirty && !string.IsNullOrEmpty(typeProperty);
 
-        for (int r = 0; r < targets.Length; r++)
-        {
-            Renderer rd = targets[r];
-            if (!Utilities.IsValid(rd)) continue;
 
-            if (pushPositions) VRCShader.SetGlobalVectorArray(UdonID_PlayerPositions, _positions);
-            if (pushColors)    VRCShader.SetGlobalVectorArray(UdonID_LightColors,    _lightColors);
-            if (pushDirs)      VRCShader.SetGlobalVectorArray(UdonID_LightDirections, _directions);
-            if (pushTypes)     _mpb.SetFloatArray(UdonID_LightType, _TypeArray);
+        if (pushPositions) VRCShader.SetGlobalVectorArray(UdonID_PlayerPositions, _positions);
+        if (pushColors)    VRCShader.SetGlobalVectorArray(UdonID_LightColors,    _lightColors);
+        if (pushDirs)      VRCShader.SetGlobalVectorArray(UdonID_LightDirections, _directions);
+        if (pushTypes)     _mpb.SetFloatArray(UdonID_LightType, _TypeArray);
 
-            VRCShader.SetGlobalFloat(UdonID_LightCount, currentCount);
-        }
+        VRCShader.SetGlobalFloat(UdonID_LightCount, currentCount);
+
 
         // Only now mark them clean
-        if (pushPositions) { _positons_isDirty = false; Debug.Log("Updated Positions"); }
-        if (pushColors)    { _lightColors_isDirty = false; Debug.Log("Updated LightColors"); }
-        if (pushDirs)      { _directions_isDirty = false; Debug.Log("Updated Directions"); }
-        if (pushTypes)     { _TypeArray_isDirty = false; Debug.Log("Updated TypeArray"); }
+        if (pushPositions) { _positons_isDirty = false;}
+        if (pushColors)    { _lightColors_isDirty = false;}
+        if (pushDirs)      { _directions_isDirty = false;}
+        if (pushTypes)     { _TypeArray_isDirty = false;}
     }
 }
