@@ -3,8 +3,8 @@ Shader "DeMuenu/World/Hoppou/RevealStandart"
     Properties
     {
         _MainTex ("Texture", 2D) = "white" {}
-        _MultTex ("Multiply Texture", 2D) = "white" {}
-        _MultiplicatorTex ("Multiply Texture Strength", Range(0,3)) = 0
+        _NormalMap ("Normal Map", 2D) = "bump" {}
+        _NormalMapStrength ("Normal Map Strength", Range(0,1)) = 1
         _Color ("Color", Color) = (1,1,1,1)
 
         _EmmisiveText ("Emmissive Texture", 2D) = "white" {}
@@ -46,6 +46,7 @@ Shader "DeMuenu/World/Hoppou/RevealStandart"
                 float4 vertex : POSITION;
                 float2 uv : TEXCOORD0;
                 float3 normal : NORMAL;
+                float4 tangent : TANGENT;
             };
 
             struct v2f
@@ -53,13 +54,14 @@ Shader "DeMuenu/World/Hoppou/RevealStandart"
                 float2 uv : TEXCOORD0;
                 float2 uv2 : TEXCOORD1;
                 float2 uvEmmis : TEXCOORD4;
-                //UNITY_FOG_COORDS(1)
                 float4 vertex : SV_POSITION;
+                float2 normUV : TEXCOORD5;
+                float3 worldTangent   : TEXCOORD6;
+                float3 worldBitangent : TEXCOORD7;
 
                 //Moonlight
                 float3 worldPos : TEXCOORD2;
                 float3 worldNormal: TEXCOORD3;
-
                 //Moonlight END
 
                 
@@ -67,10 +69,11 @@ Shader "DeMuenu/World/Hoppou/RevealStandart"
 
             sampler2D _MainTex;
             float4 _MainTex_ST;
-            sampler2D _MultTex;
-            float4 _MultTex_ST;
-            float _MultiplicatorTex;
+            sampler2D _NormalMap;
+            float4 _NormalMap_ST;
             float4 _Color;
+            float _NormalMapStrength;
+            
 
 
             sampler2D _EmmisiveText;
@@ -87,14 +90,22 @@ Shader "DeMuenu/World/Hoppou/RevealStandart"
                 v2f o;
                 o.vertex = UnityObjectToClipPos(v.vertex);
                 o.uv = TRANSFORM_TEX(v.uv, _MainTex);
-                o.uv2 = TRANSFORM_TEX(v.uv, _MultTex);
+                o.normUV = TRANSFORM_TEX(v.uv, _NormalMap);
                 o.uvEmmis = TRANSFORM_TEX(v.uv, _EmmisiveText);
+
+                float3 nWS = UnityObjectToWorldNormal(v.normal);
+                float3 tWS = normalize(UnityObjectToWorldDir(v.tangent.xyz));
+                float3 bWS = normalize(cross(nWS, tWS) * v.tangent.w);
+
+                o.worldNormal   = nWS;
+                o.worldTangent  = tWS;
+                o.worldBitangent= bWS;
 
 
                 //Moonlight Vertex
                 float4 wp = mul(unity_ObjectToWorld, v.vertex);
                 o.worldPos = wp.xyz;
-                o.worldNormal = UnityObjectToWorldNormal(v.normal);
+                //o.worldNormal = UnityObjectToWorldNormal(v.normal);
                 //Moonlight Vertex END
                 
                 return o;
@@ -104,13 +115,17 @@ Shader "DeMuenu/World/Hoppou/RevealStandart"
             {
                 // sample the texture
                 fixed4 col = tex2D(_MainTex, i.uv);
-                fixed4 mult = tex2D(_MultTex, i.uv2);
-                col = lerp(col,  mult, _MultiplicatorTex);
+                fixed4 norm = tex2D(_NormalMap, i.normUV);
+
                 fixed4 emmis = tex2D(_EmmisiveText, i.uvEmmis);
 
 
                 //Moonlight
-                float3 N = normalize(i.worldNormal); /*for lambertian diffuse*/
+                float3 nTS = UnpackNormal(norm);
+                float3 NmapWS = normalize(i.worldTangent * nTS.x +
+                                        i.worldBitangent * nTS.y +
+                                        i.worldNormal   * nTS.z);
+                float3 N = normalize(lerp(normalize(i.worldNormal), NmapWS, saturate(_NormalMapStrength)));
 
                 OutLoopSetup(i, _Udon_PlayerCount) //defines count, N, dmax, dIntensity
 
