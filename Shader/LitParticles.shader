@@ -9,6 +9,12 @@ Shader "DeMuenu/World/Hoppou/Particles/LitParticles"
         //Moonlight
         _InverseSqareMultiplier ("Inverse Square Multiplier", Float) = 1
         _LightCutoffDistance ("Light Cutoff Distance", Float) = 100
+
+
+        _shadowCasterTex ("Shadow Caster Texture", 2D) = "white" {}
+        _shadowCasterColor ("Shadow Caster Color", Color) = (1,1,1,1)
+        _OutSideColor ("Outside Color", Color) = (1,1,1,1)
+        _MinBrightnessShadow ("Min Brightness for Shadows", Range(0,1)) = 0
         //Moonlight END
 
 
@@ -36,6 +42,7 @@ Shader "DeMuenu/World/Hoppou/Particles/LitParticles"
             #include "Includes/Lambert.hlsl"
             #include "Includes/DefaultSetup.hlsl"
             #include "Includes/Variables.hlsl"
+            #include "Includes/Shadowcaster.cginc"
 
 
 
@@ -118,7 +125,14 @@ Shader "DeMuenu/World/Hoppou/Particles/LitParticles"
 
                     LightTypeCalculations(_Udon_LightColors, LightCounter, i, NdotL, dIntensity, _Udon_LightPositions[LightCounter].a, _Udon_LightPositions[LightCounter].xyz);
 
-                    dmax = dmax + contrib * float4(LightColor, 1) * NdotL; // accumulate light contributions
+                    float4 ShadowCasterMult = float4(1,1,1,1);
+                    if (_Udon_ShadowMapIndex[LightCounter] > 0.5) {
+                    ShadowCasterMult = SampleShadowcasterPlane(_Udon_WorldToLocal, _shadowCasterTex, _Udon_LightPositions[LightCounter].xyz, i.worldPos, _OutSideColor);
+                    ShadowCasterMult *= _shadowCasterColor;
+                    ShadowCasterMult = float4(ShadowCasterMult.rgb * (1-ShadowCasterMult.a), 1);
+                    }
+
+                    dmax = dmax + contrib * float4(LightColor, 1) * 1 * max(ShadowCasterMult, _MinBrightnessShadow);
 
                 }
                 

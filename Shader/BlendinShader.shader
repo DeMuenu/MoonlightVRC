@@ -15,12 +15,13 @@ Shader "DeMuenu/World/Hoppou/RevealStandart"
         //Moonlight
         _InverseSqareMultiplier ("Inverse Square Multiplier", Float) = 1
         _LightCutoffDistance ("Light Cutoff Distance", Float) = 100
-        //Moonlight END
+
 
         _shadowCasterTex ("Shadow Caster Texture", 2D) = "white" {}
         _shadowCasterColor ("Shadow Caster Color", Color) = (1,1,1,1)
         _OutSideColor ("Outside Color", Color) = (1,1,1,1)
         _MinBrightnessShadow ("Min Brightness for Shadows", Range(0,1)) = 0
+        //Moonlight END
 
 
 
@@ -90,12 +91,6 @@ Shader "DeMuenu/World/Hoppou/RevealStandart"
 
 
             MoonlightGlobalVariables
-
-            float4x4 _Udon_WorldToLocal;
-            sampler2D _shadowCasterTex;
-            float4 _shadowCasterColor;
-            float4 _OutSideColor;
-            float _MinBrightnessShadow;
 
 
             v2f vert (appdata v)
