@@ -17,7 +17,8 @@ public static class PlayerPositionsToShaderPreview
         public Vector4[] colors;
         public Vector4[] directions;
         public float[]   types;
-        public int size;
+        public float[]   shadowMapIndices;
+        public int       size;
     }
 
     static PlayerPositionsToShaderPreview()
@@ -66,16 +67,17 @@ public static class PlayerPositionsToShaderPreview
     static void EnsureArrays(PlayerPositionsToShader src, int required)
     {
         if (!_cache.TryGetValue(src, out var c) ||
-            c.positions == null || c.colors == null || c.directions == null || c.types == null ||
+            c.positions == null || c.colors == null || c.directions == null || c.types == null || c.shadowMapIndices == null ||
             c.size != required)
         {
             c = new Cache
             {
-                positions  = new Vector4[required],
-                colors     = new Vector4[required],
-                directions = new Vector4[required],
-                types      = new float[required],
-                size       = required
+                positions         = new Vector4[required],
+                colors            = new Vector4[required],
+                directions        = new Vector4[required],
+                types             = new float[required],
+                shadowMapIndices  = new float[required],
+                size              = required
             };
             _cache[src] = c;
         }
@@ -87,25 +89,27 @@ public static class PlayerPositionsToShaderPreview
         EnsureArrays(src, max);
 
         var c = _cache[src];
-        var positions  = c.positions;
-        var colors     = c.colors;
-        var directions = c.directions;
-        var types      = c.types;
+        var positions         = c.positions;
+        var colors            = c.colors;
+        var directions        = c.directions;
+        var types             = c.types;
+        var shadowMapIndices  = c.shadowMapIndices;
 
         // Clear arrays to safe defaults
         for (int i = 0; i < max; i++)
         {
-            positions[i]  = Vector4.zero;
-            colors[i]     = Vector4.zero;
-            directions[i] = Vector4.zero;
-            types[i]      = 0f;
+            positions[i]        = Vector4.zero;
+            colors[i]           = Vector4.zero;
+            directions[i]       = Vector4.zero;
+            types[i]            = 0f;
+            shadowMapIndices[i] = 0f;
         }
 
         // Use the Editor-side function defined on the partial class
         int count = 0;
         try
         {
-            src.Editor_BuildPreview(out positions, out colors, out directions, out types, out count);
+            src.Editor_BuildPreview(out positions, out colors, out directions, out types, out shadowMapIndices, out count);
 
             // replace cache arrays if sizes changed
             if (positions.Length != c.size)
@@ -113,11 +117,12 @@ public static class PlayerPositionsToShaderPreview
 
             _cache[src] = new Cache
             {
-                positions  = positions,
-                colors     = colors,
-                directions = directions,
-                types      = types,
-                size       = positions.Length
+                positions         = positions,
+                colors            = colors,
+                directions        = directions,
+                types             = types,
+                shadowMapIndices  = shadowMapIndices,
+                size              = positions.Length
             };
         }
         catch
@@ -150,6 +155,12 @@ public static class PlayerPositionsToShaderPreview
         {
             int id = Shader.PropertyToID(src.typeProperty);
             Shader.SetGlobalFloatArray(id, types);
+        }
+
+        if (!string.IsNullOrEmpty(src.shadowMapIndexProperty))
+        {
+            int id = Shader.PropertyToID(src.shadowMapIndexProperty);
+            Shader.SetGlobalFloatArray(id, shadowMapIndices);
         }
 
         if (!string.IsNullOrEmpty(src.countProperty))

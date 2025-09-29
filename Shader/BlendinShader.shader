@@ -17,6 +17,12 @@ Shader "DeMuenu/World/Hoppou/RevealStandart"
         _LightCutoffDistance ("Light Cutoff Distance", Float) = 100
         //Moonlight END
 
+        _shadowCasterTex ("Shadow Caster Texture", 2D) = "white" {}
+        _shadowCasterColor ("Shadow Caster Color", Color) = (1,1,1,1)
+        _OutSideColor ("Outside Color", Color) = (1,1,1,1)
+        _MinBrightnessShadow ("Min Brightness for Shadows", Range(0,1)) = 0
+
+
 
 
     }
@@ -36,6 +42,7 @@ Shader "DeMuenu/World/Hoppou/RevealStandart"
             #include "Includes/Lambert.hlsl"
             #include "Includes/DefaultSetup.hlsl"
             #include "Includes/Variables.hlsl"
+            #include "Includes/Shadowcaster.cginc"
 
             //Moonlight Defines
             #define MAX_LIGHTS 80 // >= maxPlayers in script
@@ -83,6 +90,12 @@ Shader "DeMuenu/World/Hoppou/RevealStandart"
 
 
             MoonlightGlobalVariables
+
+            float4x4 _Udon_WorldToLocal;
+            sampler2D _shadowCasterTex;
+            float4 _shadowCasterColor;
+            float4 _OutSideColor;
+            float _MinBrightnessShadow;
 
 
             v2f vert (appdata v)
@@ -140,7 +153,15 @@ Shader "DeMuenu/World/Hoppou/RevealStandart"
 
                     LightTypeCalculations(_Udon_LightColors, LightCounter, i, NdotL, dIntensity, _Udon_LightPositions[LightCounter].a, _Udon_LightPositions[LightCounter].xyz);
 
-                    dmax = dmax + contrib * float4(LightColor, 1) * NdotL; // accumulate light contributions
+                    float4 ShadowCasterMult = float4(1,1,1,1);
+                    if (_Udon_ShadowMapIndex[LightCounter] > 0.5) {
+                    ShadowCasterMult = SampleShadowcasterPlane(_Udon_WorldToLocal, _shadowCasterTex, _Udon_LightPositions[LightCounter].xyz, i.worldPos, _OutSideColor);
+                    ShadowCasterMult *= _shadowCasterColor;
+                    ShadowCasterMult = float4(ShadowCasterMult.rgb * (1-ShadowCasterMult.a), 1);
+                    }
+                    
+
+                    dmax = dmax + contrib * float4(LightColor, 1) * NdotL * max(ShadowCasterMult, _MinBrightnessShadow); 
 
                 }
                 
