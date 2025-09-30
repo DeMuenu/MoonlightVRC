@@ -11,12 +11,4 @@
     float  _Udon_ShadowMapIndex[MAX_LIGHTS];\
     float  _Udon_PlayerCount;                  /* set via SetFloat */ \
 
-
-    float4x4 _Udon_WorldToLocal; \
-    sampler2D _shadowCasterTex; \
-    float4 _shadowCasterColor;  \
-    float4 _OutSideColor;       \
-    float _MinBrightnessShadow; \
-
-
 #endif
