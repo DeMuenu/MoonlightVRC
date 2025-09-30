@@ -2,7 +2,7 @@
 
 ## Idea
 
-When creating a World for VRChat that reveals items around the player as they walk up to them, I stumbled across the problem that Quest doesn't handle realtime lights well. As a result, I may have ended up spending tens of hours coding my own light system.
+When creating a World for VRChat that reveals items around the player as they walk up to them, I stumbled across the problem that Quest doesn't handle real-time lights well. As a result, I may have ended up spending tens of hours coding my own light system.
 
 What this includes:
 - Point/spotlights editable at runtime.
@@ -13,18 +13,18 @@ Work in progress:
 - Water shader
 - Documentation
 - More performance testing/improvements
-- Shadowcaster planes
+- Shadow caster planes
   
 Planned:
-- Support for addative baked light maps and ambient lighting in the standart shader.
+- Support for additive baked light maps and ambient lighting in the standard shader.
   
 ---
 
 ## Performance
 
-Early testing showed the Quest 3 dropping to around 30 FPS when having 100 spotlights active in a scene at once. This test was conducted with 5 material targets. Since then the shader has grown in size significantly there has been optimisa
+Early testing showed the Quest 3 dropping to around 30 FPS when having 100 spotlights active in a scene at once. This test was conducted with 5 material targets. Since then the shader has grown in size significantly there has been optimisation
 
-On PC, I haven't encountered any frame drops in the ediotherLightSources'tor at all, even with 400 concurrent lights.
+On PC, I haven't encountered any frame drops in the editor at all, even with 400 concurrent lights.
 
 ## Quick start
 
@@ -38,13 +38,13 @@ On PC, I haven't encountered any frame drops in the ediotherLightSources'tor at 
   
 4. Add the light transform to your `PlayerPositionsToShader` component's `otherLightSources` array.
 
-5. Use one of the premade shaders on your material. Or if you feel like it, use the provided .hlsl/.cginc in your own shader. You just need to copy everything surrounded by Moonlight comments, and apply it at the end of your shader.
+5. Use one of the premade shaders on your material. Or, if you feel like it, use the provided .hlsl/.cginc in your own shader. You just need to copy everything surrounded by Moonlight comments, and apply it at the end of your shader.
 
 ---
 
 ## Editor preview
 
-- While not in Play mode, the editor helper `PlayerPositionsToShaderPreview` (EditorPreview/Editor/PlayerPositionsToShaderPreview.cs) and `ShadowcasterUpdaterPreview` (EditorPreview/Editor/ShadowcasterUpdaterPreview.cs) write the same property blocks to assigned Renderers so you can preview lighting effects in the Scene view. Those update 10 times a second.
+- While not in play mode, the editor helper `PlayerPositionsToShaderPreview` (EditorPreview/Editor/PlayerPositionsToShaderPreview.cs) and `ShadowcasterUpdaterPreview` (EditorPreview/Editor/ShadowcasterUpdaterPreview.cs) write the same property blocks to assigned Renderers so you can preview lighting effects in the Scene view. Those update 10 times a second.
 - The editor partial helper for building preview arrays is in `EditorPreview/PlayerPositionsToShader.Editor.cs`.
 
 ---
@@ -52,7 +52,7 @@ On PC, I haven't encountered any frame drops in the ediotherLightSources'tor at 
 ## Tips
 
 - Match `maxLights` in the component with the `#define MAX_LIGHTS` in your shaders (default is 80 — see Performance).
-
+  
 ---
 
 ## Contributing
