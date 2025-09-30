@@ -13,10 +13,10 @@ Work in progress:
 - Water shader
 - Documentation
 - More performance testing/improvements
+- Shadowcaster planes
   
 Planned:
-- Basic shadows via a shadow emitter map. The plan is to only sample the highest points of a map area and then calculate if the light ray is intersecting the object. This should provide basic shadow casting that is much more performant than raycasting.
-- Support for addative baked light maps and ambient lighting.
+- Support for addative baked light maps and ambient lighting in the standart shader.
   
 ---
 
