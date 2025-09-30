@@ -9,12 +9,6 @@ Shader "DeMuenu/World/Hoppou/Particles/LitParticles"
         //Moonlight
         _InverseSqareMultiplier ("Inverse Square Multiplier", Float) = 1
         _LightCutoffDistance ("Light Cutoff Distance", Float) = 100
-
-
-        _shadowCasterTex ("Shadow Caster Texture", 2D) = "white" {}
-        _shadowCasterColor ("Shadow Caster Color", Color) = (1,1,1,1)
-        _OutSideColor ("Outside Color", Color) = (1,1,1,1)
-        _MinBrightnessShadow ("Min Brightness for Shadows", Range(0,1)) = 0
         //Moonlight END
 
 
