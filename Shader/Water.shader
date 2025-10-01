@@ -61,6 +61,7 @@ Shader "DeMuenu/World/Hoppou/Water"
                 float4 vertex : POSITION;
                 float2 uv : TEXCOORD0;
                 float3 normal : NORMAL;
+                float4 tangent: TANGENT; 
             };
 
             struct v2f
@@ -73,6 +74,9 @@ Shader "DeMuenu/World/Hoppou/Water"
                 float3 worldPos : TEXCOORD2;
                 float3 worldNormal: TEXCOORD3;
                 //Moonlight END
+
+                float3 worldTangent   : TEXCOORD4;
+                float3 worldBitangent : TEXCOORD5;
             };
 
             sampler2D _MainTex;
@@ -125,6 +129,12 @@ Shader "DeMuenu/World/Hoppou/Water"
                 o.worldPos = wp.xyz;
                 o.worldNormal = UnityObjectToWorldNormal(v.normal);
                 //Moonlight Vertex END
+
+                float3 tWS = normalize(UnityObjectToWorldDir(v.tangent.xyz));
+                float3 bWS = normalize(cross(o.worldNormal, tWS) * v.tangent.w);
+
+                o.worldTangent  = tWS;
+                o.worldBitangent= bWS;
                 return o;
             }
 
@@ -140,7 +150,23 @@ Shader "DeMuenu/World/Hoppou/Water"
 
 
                 //Moonlight
-                float3 N = normalize(i.worldNormal + NormalOffset1 * _NormalMapStrength1 + NormalOffset2 * _NormalMapStrength2); //for lambertian diffuse
+
+                half3 n1 = UnpackNormal(norm);
+                half3 n2 = UnpackNormal(norm2);
+
+                n1.xy *= _NormalMapStrength1;
+                n2.xy *= _NormalMapStrength2;
+                n1 = normalize(n1);
+                n2 = normalize(n2);
+
+                // combine two tangent-space normals (whiteout mix; good enough for water)
+                half3 nTS = normalize(half3(n1.xy + n2.xy, n1.z * n2.z));
+
+                // rotate TS -> WS with the TBN (linear combo is cheaper than a matrix mul)
+                half3 N = normalize(
+                    i.worldTangent   * nTS.x +
+                    i.worldBitangent * nTS.y +
+                    i.worldNormal    * nTS.z);
                 
 
                 //Waterspecific
@@ -163,7 +189,6 @@ Shader "DeMuenu/World/Hoppou/Water"
 
                     //Watershader specific
                     //float fres = Schlick(saturate(dot(N, V)), _F0, _FresnelPower);
-                    float3 R = reflect(-V, N);
                     float  spec = pow(saturate(dot(R, L)), _SpecPower);
                     //return float4(spec, spec, spec,1);
                     dmax.rgb += _Udon_LightColors[LightCounter].rgb * contrib + _Udon_LightColors[LightCounter].rgb * _SpecIntensity * spec * contrib;
