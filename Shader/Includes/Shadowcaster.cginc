@@ -3,54 +3,30 @@
 
 #include "UnityCG.cginc"   // for tex2Dlod, etc.
 
-static const float EPS = 1e-5;
+static const float WS_EPS = 1e-5;
 
-// Returns whether segment hits the unit plane quad in plane-local z=0.
-// Outputs uv in [0,1] and t in [0,1] along A->B.
-inline bool RaySegmentHitsPlaneQuad(float4x4 worldToLocal, float3 rayOrigin, float3 rayEnd, out float2 uv, out float t)
+inline float4 SampleShadowcasterPlaneWS_Basis(
+    float3 A, float3 B,
+    float3 P0, float3 Uinv, float3 Vinv, float3 N,
+    sampler2D tex, float4 OutsideColor, float4 ShadowColor)
 {
-    float3 aP = mul(worldToLocal, float4(rayOrigin, 1)).xyz;
-    float3 bP = mul(worldToLocal, float4(rayEnd,   1)).xyz;
+    float3 d  = B - A;
+    float  dn = dot(N, d);
+    if (abs(dn) < WS_EPS) return OutsideColor;
 
-    float3 d  = bP - aP;
-    float  dz = d.z;
+    float  t  = dot(N, P0 - A) / dn;
+    if (t < 0.0 || t > 1.0) return OutsideColor;
+    float3 hit = A + d * t;
+    float3 r   = hit - P0;
 
-    // Parallel-ish to plane?
-    if (abs(dz) < EPS) return false;
+    // u,v in [-0.5, 0.5] if inside quad
+    float u = dot(r, Uinv);
+    float v = dot(r, Vinv);
+    if (abs(u) > 0.5 || abs(v) > 0.5) return OutsideColor;
 
-    // Intersect z=0
-    t = -aP.z / dz;
-
-    // Segment only
-    if (t < 0.0 || t > 1.0) return false;
-
-    float3 hit = aP + d * t;
-
-    // Inside 1x1 centered quad?
-    if (abs(hit.x) > 0.5 || abs(hit.y) > 0.5) return false;
-
-    uv = hit.xy + 0.5; // [-0.5,0.5] -> [0,1]
-    return true;
-}
-
-// Fragment-shader version: uses proper filtering/mips via tex2D
-inline float4 SampleShadowcasterPlane(float4x4 worldToLocal, sampler2D tex, float3 rayOrigin, float3 rayEnd, float4 OutsideColor)
-{
-    float2 uv; float t;
-    if (RaySegmentHitsPlaneQuad(worldToLocal, rayOrigin, rayEnd, uv, t))
-        return tex2D(tex, uv);   // full color
-
-    return OutsideColor;
-}
-
-// Anywhere (vertex/geom/compute/custom code) version: forces LOD 0
-inline float4 SampleShadowcasterPlaneLOD0(float4x4 worldToLocal, sampler2D tex, float3 rayOrigin, float3 rayEnd, float4 OutsideColor)
-{
-    float2 uv; float t;
-    if (RaySegmentHitsPlaneQuad(worldToLocal, rayOrigin, rayEnd, uv, t))
-        return tex2Dlod(tex, float4(uv, 0, 0));  // full color at mip 0
-
-    return OutsideColor;
+    float4 returnColor = tex2D(tex, float2(u + 0.5, v + 0.5)) * ShadowColor;
+    returnColor = float4(returnColor.rgb * (1 - returnColor.a), 1);
+    return returnColor;
 }
 
 #endif

@@ -79,18 +79,25 @@ Shader "DeMuenu/World/Hoppou/Particles/LitParticles"
 
             MoonlightGlobalVariables
 
-            float4x4 _Udon_WorldToLocal_1;
+            float4 _Udon_Plane_Origin_1;   // xyz = origin (world), w unused
+            float4 _Udon_Plane_Uinv_1;     // xyz = Udir / (2*halfWidth)
+            float4 _Udon_Plane_Vinv_1;     // xyz = Vdir / (2*halfHeight)
+            float4 _Udon_Plane_Normal_1;   // xyz = unit normal
+
             sampler2D _Udon_shadowCasterTex_1;
             float4 _Udon_shadowCasterColor_1;
             float4 _Udon_OutSideColor_1;
             float _Udon_MinBrightnessShadow_1;
 
-            float4x4 _Udon_WorldToLocal_2;
+            float4 _Udon_Plane_Origin_2;
+            float4 _Udon_Plane_Uinv_2;
+            float4 _Udon_Plane_Vinv_2;
+            float4 _Udon_Plane_Normal_2;
+
             sampler2D _Udon_shadowCasterTex_2;
             float4 _Udon_shadowCasterColor_2;
             float4 _Udon_OutSideColor_2;
             float _Udon_MinBrightnessShadow_2;
-
             v2f vert (appdata v)
             {
                 v2f o;
@@ -129,22 +136,28 @@ Shader "DeMuenu/World/Hoppou/Particles/LitParticles"
 
                     LightTypeCalculations(_Udon_LightColors, LightCounter, i, 1, dIntensity, _Udon_LightPositions[LightCounter].a, _Udon_LightPositions[LightCounter].xyz);
 
-                    float4 ShadowCasterMult_1 = float4(1,1,1,1);
-                    float4 ShadowCasterMult_2 = float4(1,1,1,1);
-                    if (((_Udon_ShadowMapIndex[LightCounter] > 0.5) && (_Udon_ShadowMapIndex[LightCounter] < 1.5)) || (_Udon_ShadowMapIndex[LightCounter] > 2.5)) {
-                    ShadowCasterMult_1 = SampleShadowcasterPlane(_Udon_WorldToLocal_1, _Udon_shadowCasterTex_1, _Udon_LightPositions[LightCounter].xyz, i.worldPos, _Udon_OutSideColor_1);
-                    ShadowCasterMult_1 *= _Udon_shadowCasterColor_1;
-                    ShadowCasterMult_1 = float4(ShadowCasterMult_1.rgb * (1-ShadowCasterMult_1.a), 1);
-                    ShadowCasterMult_1 = max(ShadowCasterMult_1, _Udon_MinBrightnessShadow_1)
-                    }
-                    if (_Udon_ShadowMapIndex[LightCounter] > 1.5) {
-                    ShadowCasterMult_2 = SampleShadowcasterPlane(_Udon_WorldToLocal_2, _Udon_shadowCasterTex_2, _Udon_LightPositions[LightCounter].xyz, i.worldPos, _Udon_OutSideColor_2);
-                    ShadowCasterMult_2 *= _Udon_shadowCasterColor_2;
-                    ShadowCasterMult_2 = float4(ShadowCasterMult_2.rgb * (1-ShadowCasterMult_2.a), 1);
-                    ShadowCasterMult_2 = max(ShadowCasterMult_2, _Udon_MinBrightnessShadow_2)
+                    float4 ShadowCasterMult_1 = 1;
+                    float4 ShadowCasterMult_2 = 1;
+
+                    if (((_Udon_ShadowMapIndex[LightCounter] > 0.5) && (_Udon_ShadowMapIndex[LightCounter] < 1.5)) || (_Udon_ShadowMapIndex[LightCounter] > 2.5))
+                    {
+                        float4 sc1 = SampleShadowcasterPlaneWS_Basis(
+                            _Udon_LightPositions[LightCounter].xyz, i.worldPos,
+                            _Udon_Plane_Origin_1.xyz, _Udon_Plane_Uinv_1.xyz, _Udon_Plane_Vinv_1.xyz, _Udon_Plane_Normal_1.xyz,
+                            _Udon_shadowCasterTex_1, _Udon_OutSideColor_1, _Udon_shadowCasterColor_1);
+                        ShadowCasterMult_1 = max(sc1, _Udon_MinBrightnessShadow_1);
                     }
 
-                    dmax = dmax + contrib * float4(LightColor, 1) * ShadowCasterMult1 * ShadowCasterMult_2;
+                    if (_Udon_ShadowMapIndex[LightCounter] > 1.5)
+                    {
+                        float4 sc2 = SampleShadowcasterPlaneWS_Basis(
+                            _Udon_LightPositions[LightCounter].xyz, i.worldPos,
+                            _Udon_Plane_Origin_2.xyz, _Udon_Plane_Uinv_2.xyz, _Udon_Plane_Vinv_2.xyz, _Udon_Plane_Normal_2.xyz,
+                            _Udon_shadowCasterTex_2, _Udon_OutSideColor_2, _Udon_shadowCasterColor_2);
+                        ShadowCasterMult_2 = max(sc2, _Udon_MinBrightnessShadow_2);
+                    }
+
+                    dmax = dmax + contrib * float4(LightColor, 1) * ShadowCasterMult_1 * ShadowCasterMult_2;
 
                 }
                 
