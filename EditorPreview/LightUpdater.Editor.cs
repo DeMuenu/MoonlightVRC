@@ -1,8 +1,8 @@
-// Assets/Lighting/Scripts/PlayerPositionsToShader.Editor.cs
+// Assets/Lighting/Scripts/LightUpdater.Editor.cs
 #if UNITY_EDITOR
 using UnityEngine;
 
-public partial class PlayerPositionsToShader
+public partial class LightUpdater
 {
     public void Editor_BuildPreview(
         out Vector4[] positions,

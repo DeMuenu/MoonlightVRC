@@ -6,7 +6,7 @@ using VRC.SDKBase;
 using VRC.Udon;
 using VRC.SDK3.Rendering;
 
-public partial class PlayerPositionsToShader : UdonSharpBehaviour 
+public partial class LightUpdater : UdonSharpBehaviour 
 {
     [Header("Lightsources")]
     [Tooltip("Place Transforms here which should also emit Light (attach LightdataStorage to them).")]

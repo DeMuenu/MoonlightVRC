@@ -30,13 +30,13 @@ On PC, I haven't encountered any frame drops in the editor at all, even with 400
 
 1. Clone the code into your project.
 
-2. Add the `PlayerPositionsToShader` component to a GameObject in your scene:
+2. Add the `LightUpdater` component to a GameObject in your scene:
    - Tweak strength/intensity of the local and remote player if you want them to have an attached light.
 
 3. For lights, attach `LightdataStorage` to a Transform and configure:
    - `range`, `type`, `color`, `intensity`, and `spotAngleDeg`.
   
-4. Add the light transform to your `PlayerPositionsToShader` component's `otherLightSources` array.
+4. Add the light transform to your `LightUpdater` component's `otherLightSources` array.
 
 5. Use one of the premade shaders on your material. Or, if you feel like it, use the provided .hlsl/.cginc in your own shader. You just need to copy everything surrounded by Moonlight comments, and apply it at the end of your shader.
 
@@ -44,8 +44,8 @@ On PC, I haven't encountered any frame drops in the editor at all, even with 400
 
 ## Editor preview
 
-- While not in play mode, the editor helper `PlayerPositionsToShaderPreview` (EditorPreview/Editor/PlayerPositionsToShaderPreview.cs) and `ShadowcasterUpdaterPreview` (EditorPreview/Editor/ShadowcasterUpdaterPreview.cs) write the same property blocks to assigned Renderers so you can preview lighting effects in the Scene view. Those update 10 times a second.
-- The editor partial helper for building preview arrays is in `EditorPreview/PlayerPositionsToShader.Editor.cs`.
+- While not in play mode, the editor helper `LightUpdaterPreview` (EditorPreview/Editor/LightUpdaterPreview.cs) and `ShadowcasterUpdaterPreview` (EditorPreview/Editor/ShadowcasterUpdaterPreview.cs) write the same property blocks to assigned Renderers so you can preview lighting effects in the Scene view. Those update 10 times a second.
+- The editor partial helper for building preview arrays is in `EditorPreview/LightUpdater.Editor.cs`.
 
 ---
 
