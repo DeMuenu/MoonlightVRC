@@ -10,7 +10,7 @@ Shader "DeMuenu/World/Hoppou/Particles/LitParticles"
         _InverseSqareMultiplier ("Inverse Square Multiplier", Float) = 1
         _LightCutoffDistance ("Light Cutoff Distance", Float) = 100
 
-        
+        _EnableShadowCasting ("Enable Shadowcasting", Float) = 0
         _BlurPixels ("Shadowcaster Blur Pixels", Float) = 0
         //Moonlight END
 
@@ -106,6 +106,8 @@ Shader "DeMuenu/World/Hoppou/Particles/LitParticles"
             float4 _Udon_shadowCasterTex_1_TexelSize; // xy = 1/width, 1/height
             float4 _Udon_shadowCasterTex_2_TexelSize;
 
+            bool _EnableShadowCasting;
+
             v2f vert (appdata v)
             {
                 v2f o;
@@ -147,7 +149,7 @@ Shader "DeMuenu/World/Hoppou/Particles/LitParticles"
                     float4 ShadowCasterMult_1 = 1;
                     float4 ShadowCasterMult_2 = 1;
 
-                    if (((_Udon_ShadowMapIndex[LightCounter] > 0.5) && (_Udon_ShadowMapIndex[LightCounter] < 1.5)) || (_Udon_ShadowMapIndex[LightCounter] > 2.5))
+                    if (((_Udon_ShadowMapIndex[LightCounter] > 0.5) && (_Udon_ShadowMapIndex[LightCounter] < 1.5) && (_EnableShadowCasting > 0.5)) || (_Udon_ShadowMapIndex[LightCounter] > 2.5 && _EnableShadowCasting))
                     {
                         float4 sc1 = SampleShadowcasterPlaneWS_Basis(
                             _Udon_LightPositions[LightCounter].xyz, i.worldPos,
@@ -155,8 +157,7 @@ Shader "DeMuenu/World/Hoppou/Particles/LitParticles"
                             _Udon_shadowCasterTex_1, _Udon_OutSideColor_1, _Udon_shadowCasterColor_1, _BlurPixels, _Udon_shadowCasterTex_1_TexelSize.xy);
                         ShadowCasterMult_1 = max(sc1, _Udon_MinBrightnessShadow_1);
                     }
-                    if (_Udon_ShadowMapIndex[LightCounter] > 1.5)
-                    {
+                    if (_Udon_ShadowMapIndex[LightCounter] > 1.5 && (_EnableShadowCasting > 0.5))                    {
                         float4 sc2 = SampleShadowcasterPlaneWS_Basis(
                             _Udon_LightPositions[LightCounter].xyz, i.worldPos,
                             _Udon_Plane_Origin_2.xyz, _Udon_Plane_Uinv_2.xyz, _Udon_Plane_Vinv_2.xyz, _Udon_Plane_Normal_2.xyz,
