@@ -1,4 +1,4 @@
-Shader "DeMuenu/World/Hoppou/RevealStandart"
+Shader "DeMuenu/World/Hoppou/Standard_2SP"
 {
     Properties
     {

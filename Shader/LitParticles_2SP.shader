@@ -1,4 +1,4 @@
-Shader "DeMuenu/World/Hoppou/Particles/LitParticles"
+Shader "DeMuenu/World/Hoppou/Particles/LitParticles_2SP"
 {
     Properties
     {

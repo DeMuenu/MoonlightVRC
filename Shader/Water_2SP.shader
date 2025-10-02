@@ -1,4 +1,4 @@
-Shader "DeMuenu/World/Hoppou/Water"
+Shader "DeMuenu/World/Hoppou/WaterFlat_2SP"
 {
     Properties
     {
