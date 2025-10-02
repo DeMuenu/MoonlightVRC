@@ -32,6 +32,10 @@ public class LightdataStorage : UdonSharpBehaviour
     [Tooltip("0 = omni (no cone)")]
     public float spotAngleDeg = 0f;
 
+    [Header("Shadow Settings")]
+    [Tooltip("0 = no shadows, 1-4 = shadow map index")]
+    public float shadowMapIndex = 0f; // 0 = no shadows, 1-4 = shadow map index
+
     // Convert to a Vector4 for your shader upload
     public Vector4 GetFinalColor()
     {

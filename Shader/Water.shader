@@ -17,6 +17,10 @@ Shader "DeMuenu/World/Hoppou/Water"
         _InverseSqareMultiplier ("Inverse Square Multiplier", Float) = 1
         _LightCutoffDistance ("Light Cutoff Distance", Float) = 100
 
+        _EnableShadowCasting ("Enable Shadowcasting", Float) = 0
+        _BlurPixels ("Shadowcaster Blur Pixels", Float) = 0
+        //Moonlight END
+
         _SpecPower ("Spec Power", Range(4,256)) = 64
         _SpecIntensity ("Spec Intensity", Range(0,10)) = 1
         _AmbientFloor ("Ambient Floor", Range(0,1)) = 0.08
@@ -24,7 +28,6 @@ Shader "DeMuenu/World/Hoppou/Water"
         _F0 ("F0", Range(0,1)) = 0.02
         _FresnelPower ("Fresnel Power", Range(1,8)) = 5
         _ReflectionStrength ("Reflection Strength", Range(0,1)) = 0.7
-        //Moonlight END
 
         _WaveInput ("Wave Input", 2D) = "black" {}
         _CameraScale ("Camera Scale", Float) = 15
@@ -51,6 +54,7 @@ Shader "DeMuenu/World/Hoppou/Water"
             #include "Includes/Lambert.hlsl"
             #include "Includes/DefaultSetup.hlsl"
             #include "Includes/Variables.hlsl"
+            #include "Includes/Shadowcaster.cginc"
 
             //Moonlight Defines
             #define MAX_LIGHTS 80 // >= maxPlayers in script
@@ -93,6 +97,33 @@ Shader "DeMuenu/World/Hoppou/Water"
 
             
             MoonlightGlobalVariables
+
+            float4 _Udon_Plane_Origin_1;   // xyz = origin (world), w unused
+            float4 _Udon_Plane_Uinv_1;     // xyz = Udir / (2*halfWidth)
+            float4 _Udon_Plane_Vinv_1;     // xyz = Vdir / (2*halfHeight)
+            float4 _Udon_Plane_Normal_1;   // xyz = unit normal
+
+            sampler2D _Udon_shadowCasterTex_1;
+            float4 _Udon_shadowCasterColor_1;
+            float4 _Udon_OutSideColor_1;
+            float _Udon_MinBrightnessShadow_1;
+
+            float4 _Udon_Plane_Origin_2;
+            float4 _Udon_Plane_Uinv_2;
+            float4 _Udon_Plane_Vinv_2;
+            float4 _Udon_Plane_Normal_2;
+
+            sampler2D _Udon_shadowCasterTex_2;
+            float4 _Udon_shadowCasterColor_2;
+            float4 _Udon_OutSideColor_2;
+            float _Udon_MinBrightnessShadow_2;
+
+            float _BlurPixels;
+            float4 _Udon_shadowCasterTex_1_TexelSize; // xy = 1/width, 1/height
+            float4 _Udon_shadowCasterTex_2_TexelSize;
+
+            bool _EnableShadowCasting;
+
 
             //Watershader specific
             float _SpecPower, _SpecIntensity;   
@@ -185,13 +216,30 @@ Shader "DeMuenu/World/Hoppou/Water"
 
                     LightTypeCalculations(_Udon_LightColors, LightCounter, i, 1, dIntensity, _Udon_LightPositions[LightCounter].a, _Udon_LightPositions[LightCounter].xyz);
 
+                    float4 ShadowCasterMult_1 = 1;
+                    float4 ShadowCasterMult_2 = 1;
 
+                    if (((_Udon_ShadowMapIndex[LightCounter] > 0.5) && (_Udon_ShadowMapIndex[LightCounter] < 1.5) && (_EnableShadowCasting > 0.5)) || (_Udon_ShadowMapIndex[LightCounter] > 2.5 && _EnableShadowCasting))
+                    {
+                        float4 sc1 = SampleShadowcasterPlaneWS_Basis(
+                            _Udon_LightPositions[LightCounter].xyz, i.worldPos,
+                            _Udon_Plane_Origin_1.xyz, _Udon_Plane_Uinv_1.xyz, _Udon_Plane_Vinv_1.xyz, _Udon_Plane_Normal_1.xyz,
+                            _Udon_shadowCasterTex_1, _Udon_OutSideColor_1, _Udon_shadowCasterColor_1, _BlurPixels, _Udon_shadowCasterTex_1_TexelSize.xy);
+                        ShadowCasterMult_1 = max(sc1, _Udon_MinBrightnessShadow_1);
+                    }
+                    if (_Udon_ShadowMapIndex[LightCounter] > 1.5 && (_EnableShadowCasting > 0.5))                    {
+                        float4 sc2 = SampleShadowcasterPlaneWS_Basis(
+                            _Udon_LightPositions[LightCounter].xyz, i.worldPos,
+                            _Udon_Plane_Origin_2.xyz, _Udon_Plane_Uinv_2.xyz, _Udon_Plane_Vinv_2.xyz, _Udon_Plane_Normal_2.xyz,
+                            _Udon_shadowCasterTex_2, _Udon_OutSideColor_2, _Udon_shadowCasterColor_2, _BlurPixels, _Udon_shadowCasterTex_2_TexelSize.xy);
+                        ShadowCasterMult_2 = max(sc2, _Udon_MinBrightnessShadow_2);
+                    }
 
                     //Watershader specific
                     //float fres = Schlick(saturate(dot(N, V)), _F0, _FresnelPower);
                     float  spec = pow(saturate(dot(R, L)), _SpecPower);
                     //return float4(spec, spec, spec,1);
-                    dmax.rgb += _Udon_LightColors[LightCounter].rgb * contrib + _Udon_LightColors[LightCounter].rgb * _SpecIntensity * spec * contrib;
+                    dmax.rgb += _Udon_LightColors[LightCounter].rgb * contrib * ShadowCasterMult_1 * ShadowCasterMult_2 + _Udon_LightColors[LightCounter].rgb * _SpecIntensity * spec * contrib * ShadowCasterMult_1 * ShadowCasterMult_2;
                     dmax.a -=  _SpecIntensity * spec;
                     //dmax = dmax + contrib * float4(LightColor, 1); // accumulate light contributions
 

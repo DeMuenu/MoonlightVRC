@@ -24,6 +24,9 @@ public partial class PlayerPositionsToShader : UdonSharpBehaviour
     public float playerLightIntensity = 5f;
     public float remoteLightIntensity = 2f;
 
+    [Tooltip("0 = no shadows, 1-4 = shadow map index")]
+    public float PlayerShadowMapIndex = 0f; // 0 = no shadows, 1-4 = shadow map index
+
 
     [Header("Shader property names (advanced users)")]
     [Tooltip("Vector4 array: xyz = position, w = range")]
@@ -41,6 +44,9 @@ public partial class PlayerPositionsToShader : UdonSharpBehaviour
     [Tooltip("float array: light type (1=area, 2=cone, etc)")]
     public string typeProperty = "_Udon_LightType";
 
+    [Tooltip("float array: shadow map index (0=none, 1-4=shadow map index)")]
+    public string shadowMapIndexProperty = "_Udon_ShadowMapIndex";
+
     [Header("Max Lights (advanced users)")]
     [Tooltip("Hard cap / array size. 80 = default cap")]
     public int maxLights = 80;
@@ -57,9 +63,11 @@ public partial class PlayerPositionsToShader : UdonSharpBehaviour
 
     private float[] _TypeArray;
     private bool _TypeArray_isDirty = false;
+    private float[] _ShadowMapArray;
+    private bool _ShadowMap_isDirty = false;
 
     private VRCPlayerApi[] _players;
-    private MaterialPropertyBlock _mpb;
+
 
     public int currentCount { get; private set; }
 
@@ -70,6 +78,7 @@ public partial class PlayerPositionsToShader : UdonSharpBehaviour
     private int UdonID_LightColors;
     private int UdonID_LightDirections;
     private int UdonID_LightType;
+    private int UdonID_ShadowMapIndex;
 
     void Start()
     {
@@ -79,15 +88,16 @@ public partial class PlayerPositionsToShader : UdonSharpBehaviour
         _lightColors = new Vector4[maxLights];
         _directions  = new Vector4[maxLights];
         _TypeArray   = new float[maxLights];
+        _ShadowMapArray = new float[maxLights];
 
         _players = new VRCPlayerApi[maxLights];
-        _mpb = new MaterialPropertyBlock();
 
         UdonID_PlayerPositions = VRCShader.PropertyToID(positionsProperty);
         UdonID_LightCount = VRCShader.PropertyToID(countProperty);
         UdonID_LightColors = VRCShader.PropertyToID(colorProperty);
         UdonID_LightDirections = VRCShader.PropertyToID(directionsProperty);
         UdonID_LightType = VRCShader.PropertyToID(typeProperty);
+        UdonID_ShadowMapIndex = VRCShader.PropertyToID(shadowMapIndexProperty);
 
 
         UpdateData();
@@ -150,6 +160,11 @@ public partial class PlayerPositionsToShader : UdonSharpBehaviour
                     _TypeArray[i] = 0f;
                     _TypeArray_isDirty = true;
                 }
+                if (_ShadowMapArray[i] != PlayerShadowMapIndex)
+                {
+                    _ShadowMapArray[i] = PlayerShadowMapIndex;
+                    _ShadowMap_isDirty = true;
+                }
 
 
             }
@@ -174,6 +189,11 @@ public partial class PlayerPositionsToShader : UdonSharpBehaviour
                 {
                     _TypeArray[i] = 0f;
                     _TypeArray_isDirty = true;
+                }
+                if (_ShadowMapArray[i] != 0f)
+                {
+                    _ShadowMapArray[i] = 0f;
+                    _ShadowMap_isDirty = true;
                 }
             }
         }
@@ -230,6 +250,13 @@ public partial class PlayerPositionsToShader : UdonSharpBehaviour
                     _TypeArray_isDirty = true;
                 }
 
+                float shadowMapIndex = (data != null) ? data.shadowMapIndex : 0f;
+                if (_ShadowMapArray[currentCount] != shadowMapIndex)
+                {
+                    _ShadowMapArray[currentCount] = shadowMapIndex;
+                    _ShadowMap_isDirty = true;
+                }
+
                 currentCount++;
             }
         }
@@ -259,6 +286,12 @@ public partial class PlayerPositionsToShader : UdonSharpBehaviour
                 _TypeArray[i] = 0f;
                 _TypeArray_isDirty = true;
             }
+
+            if (_ShadowMapArray[i] != 0f)
+            {
+                _ShadowMapArray[i] = 0f;
+                _ShadowMap_isDirty = true;
+            }
         }
     }
 
@@ -267,23 +300,26 @@ public partial class PlayerPositionsToShader : UdonSharpBehaviour
 
         // Snapshot which things are dirty this frame
         bool pushPositions = _positons_isDirty;
-        bool pushColors    = _lightColors_isDirty;
-        bool pushDirs      = _directions_isDirty;
-        bool pushTypes     = _TypeArray_isDirty && !string.IsNullOrEmpty(typeProperty);
+        bool pushColors = _lightColors_isDirty;
+        bool pushDirs = _directions_isDirty;
+        bool pushTypes = _TypeArray_isDirty && !string.IsNullOrEmpty(typeProperty);
+        bool pushShadowMap = _ShadowMap_isDirty;
 
 
         if (pushPositions) VRCShader.SetGlobalVectorArray(UdonID_PlayerPositions, _positions);
-        if (pushColors)    VRCShader.SetGlobalVectorArray(UdonID_LightColors,    _lightColors);
-        if (pushDirs)      VRCShader.SetGlobalVectorArray(UdonID_LightDirections, _directions);
-        if (pushTypes)     _mpb.SetFloatArray(UdonID_LightType, _TypeArray);
+        if (pushColors) VRCShader.SetGlobalVectorArray(UdonID_LightColors, _lightColors);
+        if (pushDirs) VRCShader.SetGlobalVectorArray(UdonID_LightDirections, _directions);
+        if (pushTypes) VRCShader.SetGlobalFloatArray(UdonID_LightType, _TypeArray);
+        if (pushShadowMap) VRCShader.SetGlobalFloatArray(UdonID_ShadowMapIndex, _ShadowMapArray);
 
         VRCShader.SetGlobalFloat(UdonID_LightCount, currentCount);
-
+        Debug.Log($"[MoonlightVRC] Pushed {currentCount} lights to shader.");
 
         // Only now mark them clean
-        if (pushPositions) { _positons_isDirty = false;}
-        if (pushColors)    { _lightColors_isDirty = false;}
-        if (pushDirs)      { _directions_isDirty = false;}
-        if (pushTypes)     { _TypeArray_isDirty = false;}
+        if (pushPositions) { _positons_isDirty = false; }
+        if (pushColors) { _lightColors_isDirty = false; }
+        if (pushDirs) { _directions_isDirty = false; }
+        if (pushTypes) { _TypeArray_isDirty = false; }
+        if (pushShadowMap) { _ShadowMap_isDirty = false; }
     }
 }

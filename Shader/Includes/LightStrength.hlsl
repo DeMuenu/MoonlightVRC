@@ -6,7 +6,7 @@
     { \
         contrib = _Udon_LightColors[LightCounter].a / max(1e-4, max(0, max(1, distanceFromLight - radius) * invSqMul) * max(0, max(1, distanceFromLight - radius) * invSqMul)); \
     \
-        dIntensity += contrib * NdotL; \
+        dIntensity += contrib; \
     } \
     else if (_Udon_LightType[LightCounter] == 1) \
     { \
@@ -17,7 +17,7 @@
         contrib= 1 - step(threshold, contrib); \
         \
         contrib = contrib * invSq; \
-        dIntensity += contrib * NdotL; \
+        dIntensity += contrib; \
     } \
     float3 LightColor = _Udon_LightColors[LightCounter].xyz; \
  
