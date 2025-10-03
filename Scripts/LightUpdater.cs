@@ -221,7 +221,7 @@ public partial class LightUpdater : UdonSharpBehaviour
                 Vector3 fwd = rot * Vector3.down;
 
 
-                float   cosHalf = (data != null) ? data.GetCosHalfAngle() : 0f;
+                float   Lightangle = (data != null) ? data.spotAngleDeg : 0f;
 
                 Vector4 posTemp = new Vector4(pos.x, pos.y, pos.z, range);
                 if (_positions[currentCount] != posTemp)
@@ -235,7 +235,7 @@ public partial class LightUpdater : UdonSharpBehaviour
                     _lightColors[currentCount] = colorTemp;
                     _lightColors_isDirty = true;
                 }
-                Vector4 dirTemp = new Vector4(fwd.x, fwd.y, fwd.z, cosHalf);
+                Vector4 dirTemp = new Vector4(fwd.x, fwd.y, fwd.z, Lightangle);
                 if (_directions[currentCount] != dirTemp)
                 {
                     _directions[currentCount] = dirTemp;

@@ -38,7 +38,7 @@ public partial class LightUpdater
             float intensity    = (data != null) ? data.intensity * t.localScale.x : 1f;
 
             // w = cosHalfAngle (0 for omni)
-            float cosHalf      = (data != null) ? data.GetCosHalfAngle() : 0f;
+            float cosHalf      = (data != null) ? data.spotAngleDeg : 0f;
 
             // 0=Omni, 1=Spot, 2=Directional (your custom enum)
             int typeId         = (data != null) ? data.GetTypeId() : 0;

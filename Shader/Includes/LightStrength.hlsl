@@ -14,7 +14,7 @@
         float threshold = (-1 + _Udon_LightDirections[LightCounter].w / 180); \
         \
         contrib = min(dot(normalize(i.worldPos - Lightposition), -normalize(_Udon_LightDirections[LightCounter].xyz)), 0); \
-        contrib= 1 - step(threshold, contrib); \
+        contrib= 1 - smoothstep(threshold, threshold + radius / 180, contrib); \
         \
         contrib = contrib * invSq; \
         dIntensity += contrib; \
