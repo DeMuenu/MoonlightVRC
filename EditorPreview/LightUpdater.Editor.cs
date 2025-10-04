@@ -1,8 +1,8 @@
-// Assets/Lighting/Scripts/PlayerPositionsToShader.Editor.cs
+// Assets/Lighting/Scripts/LightUpdater.Editor.cs
 #if UNITY_EDITOR
 using UnityEngine;
 
-public partial class PlayerPositionsToShader
+public partial class LightUpdater
 {
     public void Editor_BuildPreview(
         out Vector4[] positions,
@@ -30,15 +30,24 @@ public partial class PlayerPositionsToShader
 
             LightdataStorage data = t.GetComponent<LightdataStorage>();
 
+            // w = cosHalfAngle (0 for omni)
+            float cosHalf      = (data != null) ? data.GetCosHalfAngle() : 0f;
+
             Vector3 pos        = t.position;
-            float range        = (data != null) ? data.range * t.localScale.x : t.localScale.x;
+            float range = 0;
+            if (data.lightType == LightType.Sphere)
+            {
+                range = (data != null) ? data.range * t.localScale.x : t.localScale.x;
+            }
+            else
+            {
+                range = (data != null) ? Mathf.Cos(Mathf.Deg2Rad * ((data.spotAngleDeg * 0.5f) + Mathf.Max(data.range, 0))): 0f;
+            }
 
             // rgb = color, a = intensity (packed to match runtime/shader)
             Vector4 col        = (data != null) ? data.GetFinalColor() : new Vector4(1f, 1f, 1f, 1f);
             float intensity    = (data != null) ? data.intensity * t.localScale.x : 1f;
 
-            // w = cosHalfAngle (0 for omni)
-            float cosHalf      = (data != null) ? data.GetCosHalfAngle() : 0f;
 
             // 0=Omni, 1=Spot, 2=Directional (your custom enum)
             int typeId         = (data != null) ? data.GetTypeId() : 0;

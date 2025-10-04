@@ -6,7 +6,7 @@ using VRC.SDKBase;
 using VRC.Udon;
 using VRC.SDK3.Rendering;
 
-public partial class PlayerPositionsToShader : UdonSharpBehaviour 
+public partial class LightUpdater : UdonSharpBehaviour 
 {
     [Header("Lightsources")]
     [Tooltip("Place Transforms here which should also emit Light (attach LightdataStorage to them).")]
@@ -221,21 +221,29 @@ public partial class PlayerPositionsToShader : UdonSharpBehaviour
                 Vector3 fwd = rot * Vector3.down;
 
 
-                float   cosHalf = (data != null) ? data.GetCosHalfAngle() : 0f;
+                float   Lightangle = (data != null) ? data.GetCosHalfAngle() : 0f;
 
-                Vector4 posTemp = new Vector4(pos.x, pos.y, pos.z, range);
-                if (_positions[currentCount] != posTemp)
+                Vector4 posTemp = Vector4.zero;
+                if (data.lightType == LightType.Sphere)
                 {
-                    _positions[currentCount] = posTemp;
-                    _positons_isDirty = true;
+                    posTemp = new Vector4(pos.x, pos.y, pos.z, range);
                 }
+                else
+                {
+                    posTemp = new Vector4(pos.x, pos.y, pos.z, Mathf.Cos(Mathf.Deg2Rad * ((data.spotAngleDeg * 0.5f) + Mathf.Max(data.range, 0))));
+                }
+                if (_positions[currentCount] != posTemp)
+                    {
+                        _positions[currentCount] = posTemp;
+                        _positons_isDirty = true;
+                    }
                 Vector4 colorTemp = new Vector4(col.x, col.y, col.z, intensity);
                 if (_lightColors[currentCount] != colorTemp)
                 {
                     _lightColors[currentCount] = colorTemp;
                     _lightColors_isDirty = true;
                 }
-                Vector4 dirTemp = new Vector4(fwd.x, fwd.y, fwd.z, cosHalf);
+                Vector4 dirTemp = new Vector4(fwd.x, fwd.y, fwd.z, Lightangle);
                 if (_directions[currentCount] != dirTemp)
                 {
                     _directions[currentCount] = dirTemp;

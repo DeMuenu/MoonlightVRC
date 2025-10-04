@@ -1,15 +1,15 @@
-// Assets/Editor/PlayerPositionsToShaderPreview.cs
+// Assets/Editor/LightUpdaterPreview.cs
 #if UNITY_EDITOR
 using UnityEditor;
 using UnityEngine;
 using System.Collections.Generic;
 
 [InitializeOnLoad]
-public static class PlayerPositionsToShaderPreview
+public static class LightUpdaterPreview
 {
     const double kTickInterval = 0.1; // seconds
     static double _nextTick;
-    static readonly Dictionary<PlayerPositionsToShader, Cache> _cache = new Dictionary<PlayerPositionsToShader, Cache>();
+    static readonly Dictionary<LightUpdater, Cache> _cache = new Dictionary<LightUpdater, Cache>();
 
     struct Cache
     {
@@ -21,7 +21,7 @@ public static class PlayerPositionsToShaderPreview
         public int       size;
     }
 
-    static PlayerPositionsToShaderPreview()
+    static LightUpdaterPreview()
     {
         EditorApplication.update += Update;
         EditorApplication.hierarchyChanged += ForceTick;
@@ -53,18 +53,18 @@ public static class PlayerPositionsToShaderPreview
         SceneView.RepaintAll();
     }
 
-    static PlayerPositionsToShader[] FindAllInScene()
+    static LightUpdater[] FindAllInScene()
     {
 #if UNITY_2023_1_OR_NEWER
-        return Object.FindObjectsByType<PlayerPositionsToShader>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+        return Object.FindObjectsByType<LightUpdater>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
 #elif UNITY_2020_1_OR_NEWER
-        return Object.FindObjectsOfType<PlayerPositionsToShader>(true);
+        return Object.FindObjectsOfType<LightUpdater>(true);
 #else
-        return Resources.FindObjectsOfTypeAll<PlayerPositionsToShader>();
+        return Resources.FindObjectsOfTypeAll<LightUpdater>();
 #endif
     }
 
-    static void EnsureArrays(PlayerPositionsToShader src, int required)
+    static void EnsureArrays(LightUpdater src, int required)
     {
         if (!_cache.TryGetValue(src, out var c) ||
             c.positions == null || c.colors == null || c.directions == null || c.types == null || c.shadowMapIndices == null ||
@@ -83,7 +83,7 @@ public static class PlayerPositionsToShaderPreview
         }
     }
 
-    static void PushFromBehaviour(PlayerPositionsToShader src)
+    static void PushFromBehaviour(LightUpdater src)
     {
         int max = Mathf.Max(1, src.maxLights);
         EnsureArrays(src, max);
@@ -171,8 +171,8 @@ public static class PlayerPositionsToShaderPreview
     }
 }
 
-[CustomEditor(typeof(PlayerPositionsToShader))]
-public class PlayerPositionsToShaderInspector : Editor
+[CustomEditor(typeof(LightUpdater))]
+public class LightUpdaterInspector : Editor
 {
     public override void OnInspectorGUI()
     {
@@ -186,7 +186,7 @@ public class PlayerPositionsToShaderInspector : Editor
 
         if (GUILayout.Button("Refresh Now"))
         {
-            PlayerPositionsToShaderPreview.ForceTick();
+            LightUpdaterPreview.ForceTick();
             EditorApplication.QueuePlayerLoopUpdate();
             SceneView.RepaintAll();
         }
