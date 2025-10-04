@@ -221,14 +221,22 @@ public partial class LightUpdater : UdonSharpBehaviour
                 Vector3 fwd = rot * Vector3.down;
 
 
-                float   Lightangle = (data != null) ? data.spotAngleDeg : 0f;
+                float   Lightangle = (data != null) ? data.GetCosHalfAngle() : 0f;
 
-                Vector4 posTemp = new Vector4(pos.x, pos.y, pos.z, range);
-                if (_positions[currentCount] != posTemp)
+                Vector4 posTemp = Vector4.zero;
+                if (data.lightType == LightType.Sphere)
                 {
-                    _positions[currentCount] = posTemp;
-                    _positons_isDirty = true;
+                    posTemp = new Vector4(pos.x, pos.y, pos.z, range);
                 }
+                else
+                {
+                    posTemp = new Vector4(pos.x, pos.y, pos.z, Mathf.Cos(Mathf.Deg2Rad * ((data.spotAngleDeg * 0.5f) + Mathf.Max(data.range, 0))));
+                }
+                if (_positions[currentCount] != posTemp)
+                    {
+                        _positions[currentCount] = posTemp;
+                        _positons_isDirty = true;
+                    }
                 Vector4 colorTemp = new Vector4(col.x, col.y, col.z, intensity);
                 if (_lightColors[currentCount] != colorTemp)
                 {

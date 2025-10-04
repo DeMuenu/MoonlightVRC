@@ -11,10 +11,9 @@
     else if (_Udon_LightType[LightCounter] == 1) \
     { \
         float invSq    = _Udon_LightColors[LightCounter].a / max(1e-4, (distanceFromLight * invSqMul) * (distanceFromLight * invSqMul)); \
-        float threshold = (-1 + _Udon_LightDirections[LightCounter].w / 180); \
         \
-        contrib = min(dot(normalize(i.worldPos - Lightposition), -normalize(_Udon_LightDirections[LightCounter].xyz)), 0); \
-        contrib= 1 - smoothstep(threshold, threshold + radius / 180, contrib); \
+        contrib = dot(normalize(i.worldPos - Lightposition), normalize(_Udon_LightDirections[LightCounter].xyz)); \
+        contrib = smoothstep(radius,_Udon_LightDirections[LightCounter].w, contrib); \
         \
         contrib = contrib * invSq; \
         dIntensity += contrib; \
