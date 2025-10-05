@@ -28,9 +28,11 @@ public partial class LightUpdater : UdonSharpBehaviour
     public float PlayerShadowMapIndex = 0f; // 0 = no shadows, 1-4 = shadow map index
 
 
+    public float updateInterval = 0.025f;
+
     [Header("Shader property names (advanced users)")]
     [Tooltip("Vector4 array: xyz = position, w = range")]
-    public string positionsProperty = "_Udon_PlayerPositions";
+    public string positionsProperty = "_Udon_LightPositions";
 
     [Tooltip("Actual array count")]
     public string countProperty = "_Udon_PlayerCount";
@@ -107,7 +109,7 @@ public partial class LightUpdater : UdonSharpBehaviour
     void LateUpdate()
     {
         if (Time.time < _nextUpdate) return;
-        _nextUpdate = Time.time + 0.025f;
+        _nextUpdate = Time.time + updateInterval;
 
         UpdateData();
         PushToRenderers();
