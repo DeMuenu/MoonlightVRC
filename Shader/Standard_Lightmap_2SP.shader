@@ -39,16 +39,12 @@ Shader "DeMuenu/World/Hoppou/Standard_Lightmap_2SP"
             #pragma multi_compile _ LIGHTMAP_ON
             #pragma multi_compile _ DIRLIGHTMAP_COMBINED
 
-            #include "UnityCG.cginc"
-            #include "Includes/LightStrength.hlsl"
-            #include "Includes/Lambert.hlsl"
-            #include "Includes/DefaultSetup.hlsl"
-            #include "Includes/Variables.hlsl"
-            #include "Includes/Shadowcaster.cginc"
-
             //Moonlight Defines
             #define MAX_LIGHTS 80 // >= maxPlayers in script
             //Moonlight Defines END
+            
+            #include "UnityCG.cginc"
+            #include "Includes/Moonlight.hlsl"
 
             struct appdata
             {
@@ -95,37 +91,6 @@ Shader "DeMuenu/World/Hoppou/Standard_Lightmap_2SP"
             float4 _EmmisiveText_ST;
             float4 _EmmissiveColor;
             float _EmmissiveStrength;
-
-
-            MoonlightGlobalVariables
-
-
-            float4 _Udon_Plane_Origin_1;   // xyz = origin (world), w unused
-            float4 _Udon_Plane_Uinv_1;     // xyz = Udir / (2*halfWidth)
-            float4 _Udon_Plane_Vinv_1;     // xyz = Vdir / (2*halfHeight)
-            float4 _Udon_Plane_Normal_1;   // xyz = unit normal
-
-            sampler2D _Udon_shadowCasterTex_1;
-            float4 _Udon_shadowCasterColor_1;
-            float4 _Udon_OutSideColor_1;
-            float _Udon_MinBrightnessShadow_1;
-
-            float4 _Udon_Plane_Origin_2;
-            float4 _Udon_Plane_Uinv_2;
-            float4 _Udon_Plane_Vinv_2;
-            float4 _Udon_Plane_Normal_2;
-
-            sampler2D _Udon_shadowCasterTex_2;
-            float4 _Udon_shadowCasterColor_2;
-            float4 _Udon_OutSideColor_2;
-            float _Udon_MinBrightnessShadow_2;
-
-            float _BlurPixels;
-            float4 _Udon_shadowCasterTex_1_TexelSize; // xy = 1/width, 1/height
-            float4 _Udon_shadowCasterTex_2_TexelSize;
-
-            bool _EnableShadowCasting;
-
 
 
             v2f vert (appdata v)
