@@ -64,4 +64,4 @@ On PC, I haven't encountered any frame drops in the editor at all, even with 400
 ## Contributing
 
 If you want to help with development, please contact me on Discord (@demuenu) so we can coordinate our efforts.
-If your somebody with a education in Computer graphics, I would be even more thankfull for your help. As right now, it's just me with ~1.5 years of messing around in Shaderlab and ChatGPT as my advisor. So I'm sure that there are serious flaws in the codebase :-)
+If your somebody with a education in Computer graphics, I would be even more thankful for your help. As right now, it's just me with ~1.5 years of messing around in Shaderlab and ChatGPT as my advisor. So I'm sure that there are serious flaws in the codebase :-)
