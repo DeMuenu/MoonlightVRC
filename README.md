@@ -40,7 +40,7 @@ On PC, I haven't encountered any frame drops in the editor at all, even with 400
 3. For lights, attach `LightdataStorage` to a Transform and configure:
    - `range`, `type`, `color`, `intensity`, and `spotAngleDeg`.
   
-4. Add the light transform to your `LightUpdater` component's `otherLightSources` array.
+4. On your light's `LightdataStorage` component, assign your scene's `LightUpdater` to the `Light Updater` field. This allows lights to be added or removed dynamically at runtime.
 
 5. Use one of the premade shaders on your material. Or, if you feel like it, use the provided .hlsl/.cginc in your own shader. You just need to copy everything surrounded by Moonlight comments, and apply it at the end of your shader.
 

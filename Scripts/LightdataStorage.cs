@@ -1,4 +1,4 @@
-﻿using UdonSharp;
+﻿﻿using UdonSharp;
 using UnityEngine;
 using VRC.SDKBase;
 using VRC.Udon;
@@ -10,6 +10,10 @@ public enum LightType { Sphere, Spot }
 [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
 public class LightdataStorage : UdonSharpBehaviour
 {
+    [Header("System")]
+    [Tooltip("The main LightUpdater in the scene. This is required for dynamic lights.")]
+    public LightUpdater lightUpdater;
+
 
     [Header("Type")]
     [Tooltip("Select the logical light type for this source.")]
@@ -35,6 +39,22 @@ public class LightdataStorage : UdonSharpBehaviour
     [Header("Shadow Settings")]
     [Tooltip("0 = no shadows, 1-4 = shadow map index")]
     public float shadowMapIndex = 0f; // 0 = no shadows, 1-4 = shadow map index
+
+    void OnEnable()
+    {
+        if (lightUpdater != null)
+        {
+            lightUpdater.RegisterLight(this);
+        }
+    }
+
+    void OnDisable()
+    {
+        if (lightUpdater != null)
+        {
+            lightUpdater.DeregisterLight(this);
+        }
+    }
 
     // Convert to a Vector4 for your shader upload
     public Vector4 GetFinalColor()

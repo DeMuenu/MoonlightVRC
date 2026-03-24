@@ -21,38 +21,37 @@ public partial class LightUpdater
         shadowMapIndices  = new float[max];
         count             = 0;
 
-        if (otherLightSources == null) return;
+        LightdataStorage[] sceneLights = Object.FindObjectsOfType<LightdataStorage>();
 
-        for (int i = 0; i < otherLightSources.Length && count < max; i++)
+        for (int i = 0; i < sceneLights.Length && count < max; i++)
         {
-            Transform t = otherLightSources[i];
-            if (t == null || !t.gameObject.activeInHierarchy) continue;
+            LightdataStorage data = sceneLights[i];
+            if (data == null || !data.gameObject.activeInHierarchy) continue;
 
-            LightdataStorage data = t.GetComponent<LightdataStorage>();
+            Transform t = data.transform;
 
             // w = cosHalfAngle (0 for omni)
-            float cosHalf      = (data != null) ? data.GetCosHalfAngle() : 0f;
+            float cosHalf      = data.GetCosHalfAngle();
 
             Vector3 pos        = t.position;
             float range = 0;
             if (data.lightType == LightType.Sphere)
             {
-                range = (data != null) ? data.range * t.localScale.x : t.localScale.x;
+                range = data.range * t.localScale.x;
             }
             else
             {
-                range = (data != null) ? Mathf.Cos(Mathf.Deg2Rad * ((data.spotAngleDeg * 0.5f) + Mathf.Max(data.range, 0))): 0f;
+                range = Mathf.Cos(Mathf.Deg2Rad * ((data.spotAngleDeg * 0.5f) + Mathf.Max(data.range, 0)));
             }
 
             // rgb = color, a = intensity (packed to match runtime/shader)
-            Vector4 col        = (data != null) ? data.GetFinalColor() : new Vector4(1f, 1f, 1f, 1f);
-            float intensity    = (data != null) ? data.intensity * t.localScale.x : 1f;
-
+            Vector4 col        = data.GetFinalColor();
+            float intensity    = data.intensity * t.localScale.x;
 
             // 0=Omni, 1=Spot, 2=Directional (your custom enum)
-            int typeId         = (data != null) ? data.GetTypeId() : 0;
+            int typeId         = data.GetTypeId();
 
-            float shIndex      = (data != null) ? data.shadowMapIndex : 0f;
+            float shIndex      = data.shadowMapIndex;
 
             Quaternion rot     = t.rotation;
             Vector3 fwd        = rot * Vector3.down;

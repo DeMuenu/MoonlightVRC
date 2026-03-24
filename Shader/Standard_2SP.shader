@@ -176,21 +176,25 @@ Shader "DeMuenu/World/Hoppou/Standard_2SP"
                     float4 ShadowCasterMult_1 = 1;
                     float4 ShadowCasterMult_2 = 1;
 
-                    if (((_Udon_ShadowMapIndex[LightCounter] > 0.5) && (_Udon_ShadowMapIndex[LightCounter] < 1.5) && (_EnableShadowCasting > 0.5)) || (_Udon_ShadowMapIndex[LightCounter] > 2.5 && _EnableShadowCasting))
+                    if (shadowCastingEnabled)
                     {
-                        float4 sc1 = SampleShadowcasterPlaneWS_Basis(
-                            _Udon_LightPositions[LightCounter].xyz, i.worldPos,
-                            _Udon_Plane_Origin_1.xyz, _Udon_Plane_Uinv_1.xyz, _Udon_Plane_Vinv_1.xyz, _Udon_Plane_Normal_1.xyz,
-                            _Udon_shadowCasterTex_1, _Udon_OutSideColor_1, _Udon_shadowCasterColor_1, _BlurPixels, _Udon_shadowCasterTex_1_TexelSize.xy);
-                        ShadowCasterMult_1 = max(sc1, _Udon_MinBrightnessShadow_1);
-                    }
-                    if (_Udon_ShadowMapIndex[LightCounter] > 1.5 && (_EnableShadowCasting > 0.5))
-                    {
-                        float4 sc2 = SampleShadowcasterPlaneWS_Basis(
-                            _Udon_LightPositions[LightCounter].xyz, i.worldPos,
-                            _Udon_Plane_Origin_2.xyz, _Udon_Plane_Uinv_2.xyz, _Udon_Plane_Vinv_2.xyz, _Udon_Plane_Normal_2.xyz,
-                            _Udon_shadowCasterTex_2, _Udon_OutSideColor_2, _Udon_shadowCasterColor_2, _BlurPixels, _Udon_shadowCasterTex_2_TexelSize.xy);
-                        ShadowCasterMult_2 = max(sc2, _Udon_MinBrightnessShadow_2);
+                        half smIndex = _Udon_ShadowMapIndex[LightCounter];
+                        if ((smIndex > 0.5 && smIndex < 1.5) || smIndex > 2.5)
+                        {
+                            float4 sc1 = SampleShadowcasterPlaneWS_Basis(
+                                _Udon_LightPositions[LightCounter].xyz, i.worldPos,
+                                _Udon_Plane_Origin_1.xyz, _Udon_Plane_Uinv_1.xyz, _Udon_Plane_Vinv_1.xyz, _Udon_Plane_Normal_1.xyz,
+                                _Udon_shadowCasterTex_1, _Udon_OutSideColor_1, _Udon_shadowCasterColor_1, _BlurPixels, _Udon_shadowCasterTex_1_TexelSize.xy);
+                            ShadowCasterMult_1 = max(sc1, _Udon_MinBrightnessShadow_1);
+                        }
+                        if (smIndex > 1.5)
+                        {
+                            float4 sc2 = SampleShadowcasterPlaneWS_Basis(
+                                _Udon_LightPositions[LightCounter].xyz, i.worldPos,
+                                _Udon_Plane_Origin_2.xyz, _Udon_Plane_Uinv_2.xyz, _Udon_Plane_Vinv_2.xyz, _Udon_Plane_Normal_2.xyz,
+                                _Udon_shadowCasterTex_2, _Udon_OutSideColor_2, _Udon_shadowCasterColor_2, _BlurPixels, _Udon_shadowCasterTex_2_TexelSize.xy);
+                            ShadowCasterMult_2 = max(sc2, _Udon_MinBrightnessShadow_2);
+                        }
                     }
 
                     dmax = dmax + contrib * float4(LightColor, 1) * NdotL * ShadowCasterMult_1 * ShadowCasterMult_2; 
