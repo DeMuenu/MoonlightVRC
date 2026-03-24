@@ -12,12 +12,13 @@ What this includes:
 - Point/spotlights editable at runtime.
 - A couple of premade shaders (standard, particle).
 - Premade code handling lights, normals and a Lambertian diffuse.
+- Shadow caster planes
 
 Work in progress:
 - Water shader
 - Documentation
 - More performance testing/improvements
-- Shadow caster planes
+
   
 Planned:
 - Support for additive baked light maps and ambient lighting in the standard shader.
@@ -36,9 +37,10 @@ On PC, I haven't encountered any frame drops in the editor at all, even with 400
 
 2. Add the `LightUpdater` component to a GameObject in your scene:
    - Tweak strength/intensity of the local and remote player if you want them to have an attached light.
+   - Configure the `PlayerShadowMapIndex` if you want players to interact with shadows.
 
 3. For lights, attach `LightdataStorage` to a Transform and configure:
-   - `range`, `type`, `color`, `intensity`, and `spotAngleDeg`.
+   - `range`, `lightType`, `color`, `intensity`, `spotAngleDeg`, and `shadowMapIndex`.
   
 4. On your light's `LightdataStorage` component, assign your scene's `LightUpdater` to the `Light Updater` field. This allows lights to be added or removed dynamically at runtime.
 
