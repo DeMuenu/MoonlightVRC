@@ -47,9 +47,9 @@ public partial class LightUpdater : UdonSharpBehaviour
     [Tooltip("float array: shadow map index (0=none, 1-4=shadow map index)")]
     public string shadowMapIndexProperty = "_Udon_ShadowMapIndex";
 
-    [Header("Max Lights (advanced users)")]
+    [Header("Max Lighetts (advanced users)")]
     [Tooltip("Hard cap / array size. 80 = default cap")]
-    public int maxLights = 80;
+    public const int maxLights = 80;
 
 
 
@@ -66,7 +66,7 @@ public partial class LightUpdater : UdonSharpBehaviour
     private float[] _ShadowMapArray;
     private bool _ShadowMap_isDirty = false;
 
-    private LightdataStorage[] _sceneLights;
+    private LightdataStorage[] _sceneLights = new LightdataStorage[maxLights];
     private int _sceneLightCount = 0;
 
     private VRCPlayerApi[] _players;
@@ -85,14 +85,12 @@ public partial class LightUpdater : UdonSharpBehaviour
 
     void Start()
     {
-        if (maxLights < 1) maxLights = 1;
 
         _positions   = new Vector4[maxLights];
         _lightColors = new Vector4[maxLights];
         _directions  = new Vector4[maxLights];
         _TypeArray   = new float[maxLights];
         _ShadowMapArray = new float[maxLights];
-        _sceneLights = new LightdataStorage[maxLights];
 
         _players = new VRCPlayerApi[maxLights];
 

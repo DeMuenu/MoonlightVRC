@@ -1,5 +1,5 @@
 // Assets/Lighting/Scripts/LightUpdater.Editor.cs
-#if UNITY_EDITOR
+#if !COMPILER_UDONSHARP && UNITY_EDITOR
 using UnityEngine;
 
 public partial class LightUpdater
