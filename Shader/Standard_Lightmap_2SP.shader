@@ -190,7 +190,7 @@ Shader "DeMuenu/World/Hoppou/Standard_Lightmap_2SP"
                     float4 ShadowCasterMult_1 = 1;
                     float4 ShadowCasterMult_2 = 1;
 
-                    if (((_Udon_ShadowMapIndex[LightCounter] > 0.5) && (_Udon_ShadowMapIndex[LightCounter] < 1.5) && (_EnableShadowCasting > 0.5)) || (_Udon_ShadowMapIndex[LightCounter] > 2.5 && _EnableShadowCasting))
+                    if ((((_Udon_ShadowMapIndex[LightCounter] > 0.5) && (_Udon_ShadowMapIndex[LightCounter] < 1.5) && (_EnableShadowCasting > 0.5)) || (_Udon_ShadowMapIndex[LightCounter] > 2.5)) && _EnableShadowCasting)
                     {
                         float4 sc1 = SampleShadowcasterPlaneWS_Basis(
                             _Udon_LightPositions[LightCounter].xyz, i.worldPos,
