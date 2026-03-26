@@ -1,5 +1,9 @@
 # MoonlightVRC
 
+## Disclaimer
+
+This project seems similar, but the person seems to have more of a clue about what they are doing: https://github.com/z3y/ClusteredBIRP
+
 ## Idea
 
 When creating a World for VRChat that reveals items around the player as they walk up to them, I stumbled across the problem that Quest doesn't handle real-time lights well. As a result, I may have ended up spending tens of hours coding my own light system.
