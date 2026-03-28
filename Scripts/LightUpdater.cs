@@ -368,7 +368,7 @@ public partial class LightUpdater : UdonSharpBehaviour
         if (pushShadowMap) VRCShader.SetGlobalFloatArray(UdonID_ShadowMapIndex, _ShadowMapArray);
 
         VRCShader.SetGlobalFloat(UdonID_LightCount, currentCount);
-        Debug.Log($"[MoonlightVRC] Pushed {currentCount} lights to shader.");
+        //Debug.Log($"[MoonlightVRC] Pushed {currentCount} lights to shader.");
 
         // Only now mark them clean
         if (pushPositions) { _positons_isDirty = false; }

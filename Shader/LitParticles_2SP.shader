@@ -105,7 +105,7 @@ Shader "DeMuenu/World/Hoppou/Particles/LitParticles_2SP"
                 OutLoopSetup(i, _Udon_PlayerCount) //defines count, N, dmax, dIntensity
                 
                 [loop]
-                for (int LightCounter = 0; LightCounter < MAX_LIGHTS; LightCounter++)
+                for (int LightCounter = 0; LightCounter < count; LightCounter++)
                 {
 
                     InLoopSetup(_Udon_LightPositions, LightCounter, count, i); //defines distanceFromLight, contrib
