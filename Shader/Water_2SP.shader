@@ -186,7 +186,7 @@ Shader "DeMuenu/World/Hoppou/WaterFlat_2SP"
                     float4 ShadowCasterMult_1 = 1;
                     float4 ShadowCasterMult_2 = 1;
 
-                    if (shadowCastingEnabled)
+                    if ((((_Udon_ShadowMapIndex[LightCounter] > 0.5) && (_Udon_ShadowMapIndex[LightCounter] < 1.5) && (_EnableShadowCasting > 0.5)) || (_Udon_ShadowMapIndex[LightCounter] > 2.5)) && _EnableShadowCasting)
                     {
                         half smIndex = _Udon_ShadowMapIndex[LightCounter];
                         if ((smIndex > 0.5 && smIndex < 1.5) || smIndex > 2.5)
@@ -214,7 +214,6 @@ Shader "DeMuenu/World/Hoppou/WaterFlat_2SP"
                     dmax.rgb += _Udon_LightColors[LightCounter].rgb * contrib * ShadowCasterMult_1 * ShadowCasterMult_2 + _Udon_LightColors[LightCounter].rgb * _SpecIntensity * spec * contrib * ShadowCasterMult_1 * ShadowCasterMult_2;
                     dmax.a -=  _SpecIntensity * spec;
                     //dmax = dmax + contrib * float4(LightColor, 1); // accumulate light contributions
-
 
 
                 }

@@ -116,7 +116,7 @@ Shader "DeMuenu/World/Hoppou/Particles/LitParticles_2SP"
                     float4 ShadowCasterMult_1 = 1;
                     float4 ShadowCasterMult_2 = 1;
 
-                    if (shadowCastingEnabled)
+                    if ((((_Udon_ShadowMapIndex[LightCounter] > 0.5) && (_Udon_ShadowMapIndex[LightCounter] < 1.5) && (_EnableShadowCasting > 0.5)) || (_Udon_ShadowMapIndex[LightCounter] > 2.5)) && _EnableShadowCasting)
                     {
                         half smIndex = _Udon_ShadowMapIndex[LightCounter];
                         if ((smIndex > 0.5 && smIndex < 1.5) || smIndex > 2.5)
