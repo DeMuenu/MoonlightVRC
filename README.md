@@ -12,12 +12,13 @@ What this includes:
 - Point/spotlights editable at runtime.
 - A couple of premade shaders (standard, particle).
 - Premade code handling lights, normals and a Lambertian diffuse.
+- Shadow caster planes
 
 Work in progress:
 - Water shader
 - Documentation
 - More performance testing/improvements
-- Shadow caster planes
+
   
 Planned:
 - Support for additive baked light maps and ambient lighting in the standard shader.
@@ -36,11 +37,12 @@ On PC, I haven't encountered any frame drops in the editor at all, even with 400
 
 2. Add the `LightUpdater` component to a GameObject in your scene:
    - Tweak strength/intensity of the local and remote player if you want them to have an attached light.
+   - Configure the `PlayerShadowMapIndex` if you want players to interact with shadows.
 
 3. For lights, attach `LightdataStorage` to a Transform and configure:
-   - `range`, `type`, `color`, `intensity`, and `spotAngleDeg`.
+   - `range`, `lightType`, `color`, `intensity`, `spotAngleDeg`, and `shadowMapIndex`.
   
-4. Add the light transform to your `LightUpdater` component's `otherLightSources` array.
+4. On your light's `LightdataStorage` component, assign your scene's `LightUpdater` to the `Light Updater` field. This allows lights to be added or removed dynamically at runtime.
 
 5. Use one of the premade shaders on your material. Or, if you feel like it, use the provided .hlsl/.cginc in your own shader. You just need to copy everything surrounded by Moonlight comments, and apply it at the end of your shader.
 
@@ -62,4 +64,4 @@ On PC, I haven't encountered any frame drops in the editor at all, even with 400
 ## Contributing
 
 If you want to help with development, please contact me on Discord (@demuenu) so we can coordinate our efforts.
-If your somebody with a education in Computer graphics, I would be even more thankfull for your help. As right now, it's just me with ~1.5 years of messing around in Shaderlab and ChatGPT as my advisor. So I'm sure that there are serious flaws in the codebase :-)
+If your somebody with a education in Computer graphics, I would be even more thankful for your help. As right now, it's just me with ~1.5 years of messing around in Shaderlab and ChatGPT as my advisor. So I'm sure that there are serious flaws in the codebase :-)

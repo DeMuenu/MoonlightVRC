@@ -1,4 +1,5 @@
 ﻿using System;
+﻿using System;
 using UdonSharp;
 using Unity.Mathematics;
 using UnityEngine;
@@ -9,9 +10,6 @@ using VRC.SDK3.Rendering;
 public partial class LightUpdater : UdonSharpBehaviour 
 {
     [Header("Lightsources")]
-    [Tooltip("Place Transforms here which should also emit Light (attach LightdataStorage to them).")]
-    public Transform[] otherLightSources; 
-
 
     [Header("Strength")]
     [Tooltip("Local player light range")]
@@ -49,9 +47,9 @@ public partial class LightUpdater : UdonSharpBehaviour
     [Tooltip("float array: shadow map index (0=none, 1-4=shadow map index)")]
     public string shadowMapIndexProperty = "_Udon_ShadowMapIndex";
 
-    [Header("Max Lights (advanced users)")]
+    [Header("Max Lighetts (advanced users)")]
     [Tooltip("Hard cap / array size. 80 = default cap")]
-    public int maxLights = 80;
+    public const int maxLights = 80;
 
 
 
@@ -67,6 +65,9 @@ public partial class LightUpdater : UdonSharpBehaviour
     private bool _TypeArray_isDirty = false;
     private float[] _ShadowMapArray;
     private bool _ShadowMap_isDirty = false;
+
+    private LightdataStorage[] _sceneLights = new LightdataStorage[maxLights];
+    private int _sceneLightCount = 0;
 
     private VRCPlayerApi[] _players;
 
@@ -84,7 +85,6 @@ public partial class LightUpdater : UdonSharpBehaviour
 
     void Start()
     {
-        if (maxLights < 1) maxLights = 1;
 
         _positions   = new Vector4[maxLights];
         _lightColors = new Vector4[maxLights];
@@ -101,9 +101,54 @@ public partial class LightUpdater : UdonSharpBehaviour
         UdonID_LightType = VRCShader.PropertyToID(typeProperty);
         UdonID_ShadowMapIndex = VRCShader.PropertyToID(shadowMapIndexProperty);
 
-
         UpdateData();
         PushToRenderers();
+    }
+
+    public void RegisterLight(LightdataStorage light)
+    {
+        if (light == null) return;
+
+        // Prevent duplicates
+        for (int i = 0; i < _sceneLightCount; i++)
+        {
+            if (_sceneLights[i] == light) return;
+        }
+
+        if (_sceneLightCount < _sceneLights.Length)
+        {
+            _sceneLights[_sceneLightCount] = light;
+            _sceneLightCount++;
+        }
+        else
+        {
+            Debug.LogError($"[MoonlightVRC] Cannot register new light, scene light limit reached ({_sceneLights.Length})");
+        }
+    }
+
+    public void DeregisterLight(LightdataStorage light)
+    {
+        if (light == null) return;
+        int foundIndex = -1;
+        for (int i = 0; i < _sceneLightCount; i++)
+        {
+            if (_sceneLights[i] == light)
+            {
+                foundIndex = i;
+                break;
+            }
+        }
+
+        if (foundIndex != -1)
+        {
+            // Shift elements down to fill the gap
+            for (int i = foundIndex; i < _sceneLightCount - 1; i++)
+            {
+                _sceneLights[i] = _sceneLights[i + 1];
+            }
+            _sceneLightCount--;
+            _sceneLights[_sceneLightCount] = null; // Clear the last element
+        }
     }
 
     void LateUpdate()
@@ -154,6 +199,7 @@ public partial class LightUpdater : UdonSharpBehaviour
                 if (_directions[i] != TempDir)
                 {
                     _directions[i] = new Vector4(TempDir.x, TempDir.y, TempDir.z, 10f);
+                    _directions[i] = TempDir;
                     _directions_isDirty = true;
                 }
 
@@ -201,14 +247,13 @@ public partial class LightUpdater : UdonSharpBehaviour
         }
 
         // --- Scene light sources ---
-        if (otherLightSources != null)
+        if (_sceneLights != null)
         {
-            for (int j = 0; j < otherLightSources.Length && currentCount < maxLights; j++)
+            for (int j = 0; j < _sceneLightCount && currentCount < maxLights; j++)
             {
-                Transform t = otherLightSources[j];
-                if (t == null || !t.gameObject.activeInHierarchy) continue;
-
-                LightdataStorage data = t.GetComponent<LightdataStorage>();
+                LightdataStorage data = _sceneLights[j];
+                if (data == null || !data.gameObject.activeInHierarchy) continue;
+                Transform t = data.transform;
 
                 Vector3 pos = t.position;
                 float   range = (data != null) ? data.range * t.localScale.x: t.localScale.x;
@@ -323,7 +368,7 @@ public partial class LightUpdater : UdonSharpBehaviour
         if (pushShadowMap) VRCShader.SetGlobalFloatArray(UdonID_ShadowMapIndex, _ShadowMapArray);
 
         VRCShader.SetGlobalFloat(UdonID_LightCount, currentCount);
-        Debug.Log($"[MoonlightVRC] Pushed {currentCount} lights to shader.");
+        //Debug.Log($"[MoonlightVRC] Pushed {currentCount} lights to shader.");
 
         // Only now mark them clean
         if (pushPositions) { _positons_isDirty = false; }

@@ -85,7 +85,7 @@ public static class LightUpdaterPreview
 
     static void PushFromBehaviour(LightUpdater src)
     {
-        int max = Mathf.Max(1, src.maxLights);
+        int max = Mathf.Max(1, LightUpdater.maxLights);
         EnsureArrays(src, max);
 
         var c = _cache[src];
