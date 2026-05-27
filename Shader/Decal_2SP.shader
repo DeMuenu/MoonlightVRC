@@ -1,0 +1,229 @@
+Shader "DeMuenu/World/Hoppou/Decal_2SP"
+{
+    Properties
+    {
+        _MainTex ("Texture", 2D) = "white" {}
+        _NormalMap ("Normal Map", 2D) = "bump" {}
+        _NormalMapStrength ("Normal Map Strength", Range(0,1)) = 1
+        _Color ("Color", Color) = (1,1,1,1)
+
+        _EmmisiveText ("Emmissive Texture", 2D) = "white" {}
+        _EmmissiveColor ("Emmissive Color", Color) = (1,1,1,1)
+        _EmmissiveStrength ("Emmissive Strength", Range(0,10)) = 0
+
+        
+        //Moonlight
+        _InverseSqareMultiplier ("Inverse Square Multiplier", Float) = 1
+        _LightCutoffDistance ("Light Cutoff Distance", Float) = 100
+
+        _EnableShadowCasting ("Enable Shadowcasting", Float) = 0
+        _BlurPixels ("Shadowcaster Blur Pixels", Float) = 0
+        //Moonlight END
+
+        //Decal
+        _DecalTex ("Decal Texture", 2D) = "white" {}
+        _DecalColor ("Decal Color", Color) = (1,1,1,1)
+        _DecalTex_ScrollX ("Decal Scroll X", Float) = 0
+        _DecalTex_ScrollY ("Decal Scroll Y", Float) = 0
+        [Enum(Multiply,0,Additive,1,Screen,2,AlphaBlend,3)] _DecalBlendMode ("Decal Blend Mode", Float) = 0
+        [Enum(UnityEngine.Rendering.CullMode)] _Cull ("Cull Mode", Float) = 2
+        [Enum(Off, 0, On, 1)] _ZWrite ("ZWrite", Float) = 0
+        [Enum(UnityEngine.Rendering.CompareFunction)] _ZTest ("ZTest", Float) = 4
+
+    }
+    SubShader
+    {
+        Tags { "RenderType"="Transparent" "Queue"="Overlay" }
+        LOD 100
+        Cull[_Cull]
+        ZWrite [_ZWrite]
+        ZTest [_ZTest]
+        Blend SrcAlpha OneMinusSrcAlpha
+
+        Pass
+        {
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+
+            //Moonlight Defines
+            #define MAX_LIGHTS 80 // >= maxPlayers in script
+            //Moonlight Defines END
+            
+            #include "UnityCG.cginc"
+            #include "Includes/Moonlight.hlsl"
+
+            struct appdata
+            {
+                float4 vertex : POSITION;
+                float2 uv : TEXCOORD0;
+                float3 normal : NORMAL;
+                float4 tangent : TANGENT;
+            };
+
+            struct v2f
+            {
+                float2 uv : TEXCOORD0;
+                float2 uv2 : TEXCOORD1;
+                float2 uvEmmis : TEXCOORD4;
+                float4 vertex : SV_POSITION;
+                float2 normUV : TEXCOORD5;
+                float2 uvDecal : TEXCOORD8;
+                float3 worldTangent   : TEXCOORD6;
+                float3 worldBitangent : TEXCOORD7;
+
+                //Moonlight
+                float3 worldPos : TEXCOORD2;
+                float3 worldNormal: TEXCOORD3;
+                //Moonlight END
+
+                
+            };
+
+            sampler2D _MainTex;
+            float4 _MainTex_ST;
+            sampler2D _NormalMap;
+            float4 _NormalMap_ST;
+            float4 _Color;
+            float _NormalMapStrength;
+            
+
+
+            sampler2D _EmmisiveText;
+            float4 _EmmisiveText_ST;
+            float4 _EmmissiveColor;
+            float _EmmissiveStrength;
+
+            sampler2D _DecalTex;
+            float4 _DecalTex_ST;
+            float4 _DecalColor;
+            float _DecalTex_ScrollX;
+            float _DecalTex_ScrollY;
+            float _DecalBlendMode;
+
+
+            v2f vert (appdata v)
+            {
+                v2f o;
+                o.vertex = UnityObjectToClipPos(v.vertex);
+                o.uv = TRANSFORM_TEX(v.uv, _MainTex);
+                o.normUV = TRANSFORM_TEX(v.uv, _NormalMap);
+                o.uvEmmis = TRANSFORM_TEX(v.uv, _EmmisiveText);
+                o.uvDecal = TRANSFORM_TEX(v.uv, _DecalTex);
+
+                float3 nWS = UnityObjectToWorldNormal(v.normal);
+                float3 tWS = normalize(UnityObjectToWorldDir(v.tangent.xyz));
+                float3 bWS = normalize(cross(nWS, tWS) * v.tangent.w);
+
+                o.worldNormal   = nWS;
+                o.worldTangent  = tWS;
+                o.worldBitangent= bWS;
+
+
+                //Moonlight Vertex
+                float4 wp = mul(unity_ObjectToWorld, v.vertex);
+                o.worldPos = wp.xyz;
+                //o.worldNormal = UnityObjectToWorldNormal(v.normal);
+                //Moonlight Vertex END
+                
+                return o;
+            }
+
+            fixed4 frag (v2f i) : SV_Target
+            {
+                // sample the texture
+                fixed4 col = tex2D(_MainTex, i.uv);
+                fixed4 norm = tex2D(_NormalMap, i.normUV);
+
+                fixed4 emmis = tex2D(_EmmisiveText, i.uvEmmis);
+
+
+                //Moonlight
+                float3 nTS = UnpackNormal(norm);
+                float3 NmapWS = normalize(i.worldTangent * nTS.x +
+                                        i.worldBitangent * nTS.y +
+                                        i.worldNormal   * nTS.z);
+                float3 N = normalize(lerp(normalize(i.worldNormal), NmapWS, saturate(_NormalMapStrength)));
+
+                OutLoopSetup(i, _Udon_PlayerCount) //defines count, N, dmax, dIntensity
+
+                [loop]
+                for (int LightCounter = 0; LightCounter < count; LightCounter++)
+                {
+                    InLoopSetup(_Udon_LightPositions, LightCounter, count, i); //defines distanceFromLight, contrib
+
+                    
+                    //Lambertian diffuse
+                    Lambert(_Udon_LightPositions[LightCounter].xyz ,i, N); //defines NdotL
+
+                    LightTypeCalculations(_Udon_LightColors, LightCounter, i, NdotL, dIntensity, _Udon_LightPositions[LightCounter].a, _Udon_LightPositions[LightCounter].xyz);
+                    
+                    float4 ShadowCasterMult_1 = 1;
+                    float4 ShadowCasterMult_2 = 1;
+
+                    if ((((_Udon_ShadowMapIndex[LightCounter] > 0.5) && (_Udon_ShadowMapIndex[LightCounter] < 1.5) && (_EnableShadowCasting > 0.5)) || (_Udon_ShadowMapIndex[LightCounter] > 2.5)) && _EnableShadowCasting)                    {
+                        float4 sc1 = SampleShadowcasterPlaneWS_Basis(
+                            _Udon_LightPositions[LightCounter].xyz, i.worldPos,
+                            _Udon_Plane_Origin_1.xyz, _Udon_Plane_Uinv_1.xyz, _Udon_Plane_Vinv_1.xyz, _Udon_Plane_Normal_1.xyz,
+                            _Udon_shadowCasterTex_1, _Udon_OutSideColor_1, _Udon_shadowCasterColor_1, _BlurPixels, _Udon_shadowCasterTex_1_TexelSize.xy);
+                        ShadowCasterMult_1 = max(sc1, _Udon_MinBrightnessShadow_1);
+                    }
+                    if (_Udon_ShadowMapIndex[LightCounter] > 1.5 && (_EnableShadowCasting > 0.5))
+                    {
+                        half smIndex = _Udon_ShadowMapIndex[LightCounter];
+                        if ((smIndex > 0.5 && smIndex < 1.5) || smIndex > 2.5)
+                        {
+                            float4 sc1 = SampleShadowcasterPlaneWS_Basis(
+                                _Udon_LightPositions[LightCounter].xyz, i.worldPos,
+                                _Udon_Plane_Origin_1.xyz, _Udon_Plane_Uinv_1.xyz, _Udon_Plane_Vinv_1.xyz, _Udon_Plane_Normal_1.xyz,
+                                _Udon_shadowCasterTex_1, _Udon_OutSideColor_1, _Udon_shadowCasterColor_1, _BlurPixels, _Udon_shadowCasterTex_1_TexelSize.xy);
+                            ShadowCasterMult_1 = max(sc1, _Udon_MinBrightnessShadow_1);
+                        }
+                        if (smIndex > 1.5)
+                        {
+                            float4 sc2 = SampleShadowcasterPlaneWS_Basis(
+                                _Udon_LightPositions[LightCounter].xyz, i.worldPos,
+                                _Udon_Plane_Origin_2.xyz, _Udon_Plane_Uinv_2.xyz, _Udon_Plane_Vinv_2.xyz, _Udon_Plane_Normal_2.xyz,
+                                _Udon_shadowCasterTex_2, _Udon_OutSideColor_2, _Udon_shadowCasterColor_2, _BlurPixels, _Udon_shadowCasterTex_2_TexelSize.xy);
+                            ShadowCasterMult_2 = max(sc2, _Udon_MinBrightnessShadow_2);
+                        }
+                    }
+
+                    dmax = dmax + contrib * float4(LightColor, 1) * NdotL * ShadowCasterMult_1 * ShadowCasterMult_2; 
+
+                }
+                
+                //dmax.xyz = min(dmax * dIntensity, 1.0);
+                dmax.w = 1.0;
+
+                //Moonlight END
+
+                fixed4 decal = tex2D(_DecalTex, i.uvDecal + float2(_DecalTex_ScrollX, _DecalTex_ScrollY) * _Time.y);
+                fixed4 base = col * _Color * dmax + emmis * _EmmissiveStrength * _EmmissiveColor;
+                fixed4 dcol = decal * _DecalColor * dmax;
+
+                if (_DecalBlendMode < 0.5)
+                {
+                    base = lerp(base, base * dcol, dcol.a);
+                }
+                else if (_DecalBlendMode < 1.5)
+                {
+                    base = lerp(base, base + dcol, dcol.a);
+                }
+                else if (_DecalBlendMode < 2.5)
+                {
+                    base = lerp(base, 1 - (1 - base) * (1 - dcol), dcol.a);
+                }
+                else
+                {
+                    base = lerp(base, dcol, dcol.a);
+                }
+
+                return base;
+            }
+            ENDCG
+        }
+    }
+
+    FallBack "Diffuse"
+}
