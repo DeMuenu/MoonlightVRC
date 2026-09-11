@@ -1,11 +1,11 @@
 ﻿using System;
-﻿using System;
 using UdonSharp;
 using Unity.Mathematics;
 using UnityEngine;
 using VRC.SDKBase;
 using VRC.Udon;
 using VRC.SDK3.Rendering;
+using VRC.SDK3.Persistence;
 
 public partial class LightUpdater : UdonSharpBehaviour 
 {
@@ -24,7 +24,6 @@ public partial class LightUpdater : UdonSharpBehaviour
 
     [Tooltip("0 = no shadows, 1-4 = shadow map index")]
     public float PlayerShadowMapIndex = 0f; // 0 = no shadows, 1-4 = shadow map index
-
 
     public float updateInterval = 0.025f;
 
@@ -47,10 +46,13 @@ public partial class LightUpdater : UdonSharpBehaviour
     [Tooltip("float array: shadow map index (0=none, 1-4=shadow map index)")]
     public string shadowMapIndexProperty = "_Udon_ShadowMapIndex";
 
-    [Header("Max Lighetts (advanced users)")]
+    [Header("Max Lights (advanced users)")]
     [Tooltip("Hard cap / array size. 80 = default cap")]
     public const int maxLights = 80;
 
+    [Header("Player Persistence")]
+    [Tooltip("The PlayerData key used to store the light color")]
+    public string colorDataKey = "Moonlight_LightColor";
 
 
     // Internals
@@ -66,11 +68,14 @@ public partial class LightUpdater : UdonSharpBehaviour
     private float[] _ShadowMapArray;
     private bool _ShadowMap_isDirty = false;
 
+    // Cache arrays using integers for maximum performance
+    private int[] _cachedPackedColors;
+    private Color[] _cachedColors;
+
     private LightdataStorage[] _sceneLights = new LightdataStorage[maxLights];
     private int _sceneLightCount = 0;
 
     private VRCPlayerApi[] _players;
-
 
     public int currentCount { get; private set; }
 
@@ -85,12 +90,20 @@ public partial class LightUpdater : UdonSharpBehaviour
 
     void Start()
     {
-
         _positions   = new Vector4[maxLights];
         _lightColors = new Vector4[maxLights];
         _directions  = new Vector4[maxLights];
         _TypeArray   = new float[maxLights];
         _ShadowMapArray = new float[maxLights];
+
+        _cachedPackedColors = new int[maxLights];
+        _cachedColors = new Color[maxLights];
+
+        // Initialize cache with -1 (unset)
+        for (int i = 0; i < maxLights; i++)
+        {
+            _cachedPackedColors[i] = -1;
+        }
 
         _players = new VRCPlayerApi[maxLights];
 
@@ -105,11 +118,30 @@ public partial class LightUpdater : UdonSharpBehaviour
         PushToRenderers();
     }
 
+    // --- NEW METHODS FOR SAVING COLOR ---
+
+    public void SetLocalPlayerColor(Color newColor)
+    {
+        Color32 c32 = newColor;
+        // Pack RGB bytes into a single integer
+        int packedColor = (c32.r << 16) | (c32.g << 8) | c32.b;
+        
+        // Save the integer to PlayerData
+        PlayerData.SetInt(colorDataKey, packedColor);
+    }
+
+    public void ResetLocalPlayerColor()
+    {
+        // -1 represents an unset/default state
+        PlayerData.SetInt(colorDataKey, -1); 
+    }
+
+    // --- END NEW METHODS ---
+
     public void RegisterLight(LightdataStorage light)
     {
         if (light == null) return;
 
-        // Prevent duplicates
         for (int i = 0; i < _sceneLightCount; i++)
         {
             if (_sceneLights[i] == light) return;
@@ -141,13 +173,12 @@ public partial class LightUpdater : UdonSharpBehaviour
 
         if (foundIndex != -1)
         {
-            // Shift elements down to fill the gap
             for (int i = foundIndex; i < _sceneLightCount - 1; i++)
             {
                 _sceneLights[i] = _sceneLights[i + 1];
             }
             _sceneLightCount--;
-            _sceneLights[_sceneLightCount] = null; // Clear the last element
+            _sceneLights[_sceneLightCount] = null;
         }
     }
 
@@ -164,7 +195,6 @@ public partial class LightUpdater : UdonSharpBehaviour
     {
         currentCount = VRCPlayerApi.GetPlayerCount();
 
-
         VRCPlayerApi.GetPlayers(_players);
 
         // --- Players as light sources ---
@@ -177,7 +207,6 @@ public partial class LightUpdater : UdonSharpBehaviour
                 float lightRange = p.isLocal ? lightStrengthLocal : lightStrengthRemote;
                 float intensity = p.isLocal ? playerLightIntensity : remoteLightIntensity;
 
-
                 Vector4 posTemp = new Vector4(pos.x, pos.y + 1f, pos.z, lightRange);
                 if (_positions[i] != posTemp)
                 {
@@ -185,20 +214,44 @@ public partial class LightUpdater : UdonSharpBehaviour
                     _positons_isDirty = true;
                 }
 
-                Vector4 colorTemp = new Vector4(1f, 1f, 1f, intensity);
+                // --- APPLY CUSTOM PERSISTENT COLORS ---
+                Vector4 colorTemp = new Vector4(1f, 1f, 1f, intensity); // Default White
+
+                // Try to get the player's custom packed color
+                if (PlayerData.TryGetInt(p, colorDataKey, out int currentPacked) && currentPacked != -1)
+                {
+                    // Cache check using integers (super fast)
+                    if (_cachedPackedColors[i] != currentPacked)
+                    {
+                        _cachedPackedColors[i] = currentPacked;
+                        
+                        // Unpack integer back into RGB
+                        byte r = (byte)((currentPacked >> 16) & 0xFF);
+                        byte g = (byte)((currentPacked >> 8) & 0xFF);
+                        byte b = (byte)(currentPacked & 0xFF);
+                        
+                        _cachedColors[i] = new Color32(r, g, b, 255);
+                    }
+                    // Apply cached color
+                    colorTemp = new Vector4(_cachedColors[i].r, _cachedColors[i].g, _cachedColors[i].b, intensity * transform.localScale.x); //use x scale to darken globaly
+                }
+                else
+                {
+                    _cachedPackedColors[i] = -1; // Reset cache if no color is set or is reset
+                }
+
                 if (_lightColors[i] != colorTemp)
                 {
                     _lightColors[i] = colorTemp;
                     _lightColors_isDirty = true;
                 }
+                // --- END COLOR LOGIC ---
 
 
-                //Quaternion rot = p.GetRotation(); //We skip this for players, as they have round lights
                 Vector3 fwd = Vector3.up;
                 Vector4 TempDir = new Vector4(fwd.x, fwd.y, fwd.z, 10f);
                 if (_directions[i] != TempDir)
                 {
-                    _directions[i] = new Vector4(TempDir.x, TempDir.y, TempDir.z, 10f);
                     _directions[i] = TempDir;
                     _directions_isDirty = true;
                 }
@@ -213,8 +266,6 @@ public partial class LightUpdater : UdonSharpBehaviour
                     _ShadowMapArray[i] = PlayerShadowMapIndex;
                     _ShadowMap_isDirty = true;
                 }
-
-
             }
             else
             {
@@ -258,15 +309,11 @@ public partial class LightUpdater : UdonSharpBehaviour
                 Vector3 pos = t.position;
                 float   range = (data != null) ? data.range * t.localScale.x: t.localScale.x;
 
-                // NOTE: we pack intensity into color.w (to match your current shader usage)
                 Vector4 col = (data != null) ? data.GetFinalColor() : new Vector4(1f, 1f, 1f, 1f);
-                float   intensity = (data != null) ? data.intensity * t.localScale.x : 1f;
-
-                //Vector3 fwd = new Vector3(t.localRotation.x, t.localRotation.y, t.localRotation.z);
+                float   intensity = (data != null) ? data.intensity * t.localScale.x * transform.localScale.x : 1f;
 
                 Quaternion rot = t.rotation;
                 Vector3 fwd = rot * Vector3.down;
-
 
                 float   Lightangle = (data != null) ? data.GetCosHalfAngle() : 0f;
 
@@ -297,7 +344,6 @@ public partial class LightUpdater : UdonSharpBehaviour
                     _directions_isDirty = true;
                 }
 
-                // ✅ Use your custom enum id (Omni=0, Spot=1, Directional=2)
                 int typeId = (data != null) ? data.GetTypeId() : 0;
                 if (_TypeArray[currentCount] != (float)typeId)
                 {
@@ -352,14 +398,11 @@ public partial class LightUpdater : UdonSharpBehaviour
 
     private void PushToRenderers()
     {
-
-        // Snapshot which things are dirty this frame
         bool pushPositions = _positons_isDirty;
         bool pushColors = _lightColors_isDirty;
         bool pushDirs = _directions_isDirty;
         bool pushTypes = _TypeArray_isDirty && !string.IsNullOrEmpty(typeProperty);
         bool pushShadowMap = _ShadowMap_isDirty;
-
 
         if (pushPositions) VRCShader.SetGlobalVectorArray(UdonID_PlayerPositions, _positions);
         if (pushColors) VRCShader.SetGlobalVectorArray(UdonID_LightColors, _lightColors);
@@ -368,9 +411,7 @@ public partial class LightUpdater : UdonSharpBehaviour
         if (pushShadowMap) VRCShader.SetGlobalFloatArray(UdonID_ShadowMapIndex, _ShadowMapArray);
 
         VRCShader.SetGlobalFloat(UdonID_LightCount, currentCount);
-        //Debug.Log($"[MoonlightVRC] Pushed {currentCount} lights to shader.");
 
-        // Only now mark them clean
         if (pushPositions) { _positons_isDirty = false; }
         if (pushColors) { _lightColors_isDirty = false; }
         if (pushDirs) { _directions_isDirty = false; }
