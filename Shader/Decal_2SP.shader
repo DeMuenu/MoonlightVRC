@@ -1,4 +1,4 @@
-Shader "DeMuenu/World/Hoppou/Decal_2SP"
+Shader "DeMuenu/MoonlightVRC/Decal_2SP"
 {
     Properties
     {

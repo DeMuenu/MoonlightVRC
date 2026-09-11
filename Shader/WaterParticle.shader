@@ -1,4 +1,4 @@
-Shader "DeMuenu/World/Hoppou/WaterParticle"
+Shader "DeMuenu/MoonlightVRC/WaterParticle"
 {
     Properties
     {
