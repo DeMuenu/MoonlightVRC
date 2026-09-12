@@ -12,6 +12,8 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_Metallic"
         _EmmissiveStrength ("Emmissive Strength", Range(0,10)) = 0
 
         _MetallicTex ("Metallic Texture", 2D) = "white" {}
+
+        _MetallicMult ("Metallic Multiplier", Range(0,1)) = 0
         
         _F0 ("F0", Range(0,1)) = 0.02
         _FresnelPower ("Fresnel Power", Range(1,8)) = 5
@@ -94,6 +96,7 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_Metallic"
 
 
             sampler2D _MetallicTex;
+            float _MetallicMult;
             
             float _F0, _FresnelPower, _ReflectionStrength;
 
@@ -146,7 +149,7 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_Metallic"
                 float3 N = normalize(lerp(normalize(i.worldNormal), NmapWS, saturate(_NormalMapStrength)));
 
 
-                float metallic = tex2D(_MetallicTex, i.uv).r;
+                float metallic = tex2D(_MetallicTex, i.uv).r * _MetallicMult;
                 float3 V = normalize(_WorldSpaceCameraPos - i.worldPos);
                 float3 R = reflect(-V, N);  //for reflection vector
                 float  NoV = saturate(dot(N, V));
