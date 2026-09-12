@@ -8,6 +8,11 @@ using System.Collections.Generic;
 public static class LightUpdaterPreview
 {
     const double kTickInterval = 0.1; // seconds
+    const string kCameraEnabledKey = "MoonlightVRC.SceneCameraLight.Enabled";
+    const string kCameraColorKey = "MoonlightVRC.SceneCameraLight.Color";
+    const string kCameraIntensityKey = "MoonlightVRC.SceneCameraLight.Intensity";
+    const string kCameraRangeKey = "MoonlightVRC.SceneCameraLight.Range";
+
     static double _nextTick;
     static readonly Dictionary<LightUpdater, Cache> _cache = new Dictionary<LightUpdater, Cache>();
 
@@ -21,6 +26,39 @@ public static class LightUpdaterPreview
         public int       size;
     }
 
+    public static bool cameraLightEnabled
+    {
+        get => EditorPrefs.GetBool(kCameraEnabledKey, false);
+        set => EditorPrefs.SetBool(kCameraEnabledKey, value);
+    }
+
+    public static Color cameraLightColor
+    {
+        get
+        {
+            string value = EditorPrefs.GetString(kCameraColorKey, "1,1,1,1");
+            string[] comps = value.Split(',');
+            float r = comps.Length > 0 ? float.TryParse(comps[0], out var rr) ? rr : 1f : 1f;
+            float g = comps.Length > 1 ? float.TryParse(comps[1], out var gg) ? gg : 1f : 1f;
+            float b = comps.Length > 2 ? float.TryParse(comps[2], out var bb) ? bb : 1f : 1f;
+            float a = comps.Length > 3 ? float.TryParse(comps[3], out var aa) ? aa : 1f : 1f;
+            return new Color(r, g, b, a);
+        }
+        set => EditorPrefs.SetString(kCameraColorKey, string.Format("{0},{1},{2},{3}", value.r, value.g, value.b, value.a));
+    }
+
+    public static float cameraLightIntensity
+    {
+        get => EditorPrefs.GetFloat(kCameraIntensityKey, 2f);
+        set => EditorPrefs.SetFloat(kCameraIntensityKey, Mathf.Max(0f, value));
+    }
+
+    public static float cameraLightRange
+    {
+        get => EditorPrefs.GetFloat(kCameraRangeKey, 5f);
+        set => EditorPrefs.SetFloat(kCameraRangeKey, Mathf.Max(0.01f, value));
+    }
+
     static LightUpdaterPreview()
     {
         EditorApplication.update += Update;
@@ -30,6 +68,27 @@ public static class LightUpdaterPreview
     }
 
     public static void ForceTick() => _nextTick = 0;
+
+    [MenuItem("MoonlightVRC/Scene Camera Light/Toggle %l", priority = 100)]
+    public static void ToggleSceneCameraLight()
+    {
+        cameraLightEnabled = !cameraLightEnabled;
+        ForceTick();
+        SceneView.RepaintAll();
+    }
+
+    [MenuItem("MoonlightVRC/Scene Camera Light/Toggle %l", validate = true)]
+    public static bool ToggleSceneCameraLightValidate()
+    {
+        Menu.SetChecked("MoonlightVRC/Scene Camera Light/Toggle %l", cameraLightEnabled);
+        return true;
+    }
+
+    [MenuItem("MoonlightVRC/Scene Camera Light/Open Settings", priority = 101)]
+    public static void OpenSceneCameraLightSettings()
+    {
+        SceneCameraLightSettingsWindow.ShowWindow();
+    }
 
     static void Update()
     {
@@ -83,6 +142,26 @@ public static class LightUpdaterPreview
         }
     }
 
+    static void AppendCameraLight(ref Vector4[] positions, ref Vector4[] colors, ref Vector4[] directions, ref float[] types, ref float[] shadowMapIndices, ref int count, int max)
+    {
+        if (!cameraLightEnabled || count >= max) return;
+
+        SceneView view = SceneView.lastActiveSceneView;
+        if (view == null || view.camera == null) return;
+
+        Transform cameraTransform = view.camera.transform;
+        Vector3 cameraPosition = cameraTransform.position;
+        Vector3 cameraDirection = cameraTransform.forward;
+        Color lightColor = cameraLightColor;
+
+        positions[count] = new Vector4(cameraPosition.x, cameraPosition.y, cameraPosition.z, cameraLightRange);
+        colors[count] = new Vector4(lightColor.r, lightColor.g, lightColor.b, cameraLightIntensity);
+        directions[count] = new Vector4(cameraDirection.x, cameraDirection.y, cameraDirection.z, 0f);
+        types[count] = 0f;
+        shadowMapIndices[count] = 0f;
+        count++;
+    }
+
     static void PushFromBehaviour(LightUpdater src)
     {
         int max = Mathf.Max(1, LightUpdater.maxLights);
@@ -131,6 +210,8 @@ public static class LightUpdaterPreview
             count = 0;
         }
 
+        AppendCameraLight(ref positions, ref colors, ref directions, ref types, ref shadowMapIndices, ref count, max);
+
         // Mirror runtime: push as GLOBAL shader properties
         // Resolve property IDs only if names are provided
         if (!string.IsNullOrEmpty(src.positionsProperty))
@@ -171,6 +252,51 @@ public static class LightUpdaterPreview
     }
 }
 
+public class SceneCameraLightSettingsWindow : EditorWindow
+{
+    public static void ShowWindow()
+    {
+        var window = GetWindow<SceneCameraLightSettingsWindow>(false, "MoonlightVRC Camera Light");
+        window.minSize = new Vector2(260f, 220f);
+        window.ShowUtility();
+    }
+
+    void OnGUI()
+    {
+        EditorGUI.BeginChangeCheck();
+
+        bool enabled = LightUpdaterPreview.cameraLightEnabled;
+        Color color = LightUpdaterPreview.cameraLightColor;
+        float intensity = LightUpdaterPreview.cameraLightIntensity;
+        float range = LightUpdaterPreview.cameraLightRange;
+
+        enabled = EditorGUILayout.Toggle("Enabled", enabled);
+        color = EditorGUILayout.ColorField("Color", color);
+        intensity = EditorGUILayout.Slider("Intensity", intensity, 0f, 20f);
+        range = EditorGUILayout.Slider("Range", range, 0.1f, 50f);
+
+        if (EditorGUI.EndChangeCheck())
+        {
+            LightUpdaterPreview.cameraLightEnabled = enabled;
+            LightUpdaterPreview.cameraLightColor = color;
+            LightUpdaterPreview.cameraLightIntensity = intensity;
+            LightUpdaterPreview.cameraLightRange = range;
+            LightUpdaterPreview.ForceTick();
+            SceneView.RepaintAll();
+        }
+
+        EditorGUILayout.Space();
+        using (new EditorGUILayout.HorizontalScope())
+        {
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("Close", GUILayout.Width(80f)))
+            {
+                Close();
+            }
+        }
+    }
+}
+
 [CustomEditor(typeof(LightUpdater))]
 public class LightUpdaterInspector : Editor
 {
@@ -182,6 +308,16 @@ public class LightUpdaterInspector : Editor
         {
             EditorGUILayout.LabelField("Edit-Mode Preview", EditorStyles.boldLabel);
             EditorGUILayout.LabelField("Updates ~10×/s using players and Other Light Sources.");
+        }
+
+        GUILayout.Space(6);
+        bool sceneCameraLightEnabled = LightUpdaterPreview.cameraLightEnabled;
+        bool toggled = EditorGUILayout.Toggle("Scene Camera Light", sceneCameraLightEnabled);
+        if (toggled != sceneCameraLightEnabled)
+        {
+            LightUpdaterPreview.cameraLightEnabled = toggled;
+            LightUpdaterPreview.ForceTick();
+            SceneView.RepaintAll();
         }
 
         if (GUILayout.Button("Refresh Now"))
