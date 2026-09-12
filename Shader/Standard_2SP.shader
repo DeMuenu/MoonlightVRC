@@ -1,4 +1,4 @@
-Shader "DeMuenu/World/Hoppou/Standard_2SP"
+Shader "DeMuenu/MoonlightVRC/Standard_2SP"
 {
     Properties
     {

@@ -1,4 +1,4 @@
-Shader "DeMuenu/MoonlightVRC/Standard_Lightmap_2SP"
+Shader "DeMuenu/MoonlightVRC/Standard_2SP_Metallic"
 {
     Properties
     {
@@ -11,7 +11,15 @@ Shader "DeMuenu/MoonlightVRC/Standard_Lightmap_2SP"
         _EmmissiveColor ("Emmissive Color", Color) = (1,1,1,1)
         _EmmissiveStrength ("Emmissive Strength", Range(0,10)) = 0
 
+        _MetallicTex ("Metallic Texture", 2D) = "white" {}
+
+        _MetallicMult ("Metallic Multiplier", Range(0,1)) = 0
         
+        _F0 ("F0", Range(0,1)) = 0.02
+        _FresnelPower ("Fresnel Power", Range(1,8)) = 5
+        _ReflectionStrength ("Reflection Strength", Range(0,1)) = 0.7
+        
+
         //Moonlight
         _InverseSqareMultiplier ("Inverse Square Multiplier", Float) = 1
         _LightCutoffDistance ("Light Cutoff Distance", Float) = 100
@@ -36,8 +44,6 @@ Shader "DeMuenu/MoonlightVRC/Standard_Lightmap_2SP"
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
-            #pragma multi_compile _ LIGHTMAP_ON
-            #pragma multi_compile _ DIRLIGHTMAP_COMBINED
 
             //Moonlight Defines
             #define MAX_LIGHTS 80 // >= maxPlayers in script
@@ -46,13 +52,14 @@ Shader "DeMuenu/MoonlightVRC/Standard_Lightmap_2SP"
             #include "UnityCG.cginc"
             #include "Includes/Moonlight.hlsl"
 
+
+
             struct appdata
             {
                 float4 vertex : POSITION;
                 float2 uv : TEXCOORD0;
                 float3 normal : NORMAL;
                 float4 tangent : TANGENT;
-                float2 uv2    : TEXCOORD1; // Lightmap UV
             };
 
             struct v2f
@@ -71,11 +78,6 @@ Shader "DeMuenu/MoonlightVRC/Standard_Lightmap_2SP"
                 //Moonlight END
 
                 
-                #ifdef LIGHTMAP_ON
-                    float2 lmuv : TEXCOORD8;
-                #endif
-
-                
             };
 
             sampler2D _MainTex;
@@ -92,6 +94,17 @@ Shader "DeMuenu/MoonlightVRC/Standard_Lightmap_2SP"
             float4 _EmmissiveColor;
             float _EmmissiveStrength;
 
+
+            sampler2D _MetallicTex;
+            float _MetallicMult;
+            
+            float _F0, _FresnelPower, _ReflectionStrength;
+
+            inline float SchlickFresnel(float NoV, float F0, float power)
+            {
+                float f = pow(saturate(1.0 - NoV), power);
+                return saturate(F0 + (1.0 - F0) * f);
+            }
 
             v2f vert (appdata v)
             {
@@ -115,10 +128,6 @@ Shader "DeMuenu/MoonlightVRC/Standard_Lightmap_2SP"
                 o.worldPos = wp.xyz;
                 //o.worldNormal = UnityObjectToWorldNormal(v.normal);
                 //Moonlight Vertex END
-
-                #ifdef LIGHTMAP_ON
-                    o.lmuv = v.uv2 * unity_LightmapST.xy + unity_LightmapST.zw;
-                #endif
                 
                 return o;
             }
@@ -139,6 +148,15 @@ Shader "DeMuenu/MoonlightVRC/Standard_Lightmap_2SP"
                                         i.worldNormal   * nTS.z);
                 float3 N = normalize(lerp(normalize(i.worldNormal), NmapWS, saturate(_NormalMapStrength)));
 
+
+                float metallic = tex2D(_MetallicTex, i.uv).r * _MetallicMult;
+                float3 V = normalize(_WorldSpaceCameraPos - i.worldPos);
+                float3 R = reflect(-V, N);  //for reflection vector
+                float  NoV = saturate(dot(N, V));
+                float fresnelTerm = SchlickFresnel(NoV, _F0, _FresnelPower);
+                float specularStrength = lerp(_F0, 1.0, metallic) * _ReflectionStrength;
+                float3 specularAccum = 0;
+
                 OutLoopSetup(i, _Udon_PlayerCount) //defines count, N, dmax, dIntensity
 
                 [loop]
@@ -150,13 +168,29 @@ Shader "DeMuenu/MoonlightVRC/Standard_Lightmap_2SP"
                     //Lambertian diffuse
                     Lambert(_Udon_LightPositions[LightCounter].xyz ,i, N); //defines NdotL
 
+                    // --- Specular (Blinn-Phong) ---
+                    //float3 L = normalize(_Udon_LightPositions[LightCounter].xyz - i.worldPos);
+                    float3 H = normalize(V + L);
+                    float NdotH = saturate(dot(N, H));
+                    float NdotL_spec = saturate(dot(N, L));
+
+                    // Gloss from metallic map: more metallic = sharper highlight
+                    // Adjust the multiplier (64.0) to taste
+                    float gloss = lerp(8.0, 256.0, metallic);
+                    float blinnPhong = pow(NdotH, gloss) * NdotL_spec;
+
+                    // Fresnel per-light (based on VdotH for accuracy)
+                    float VdotH = saturate(dot(V, H));
+                    float F = SchlickFresnel(VdotH, _F0, _FresnelPower);
+
+                    
+
                     LightTypeCalculations(_Udon_LightColors, LightCounter, i, NdotL, dIntensity, _Udon_LightPositions[LightCounter].a, _Udon_LightPositions[LightCounter].xyz);
                     
                     float4 ShadowCasterMult_1 = 1;
                     float4 ShadowCasterMult_2 = 1;
 
-                    if ((((_Udon_ShadowMapIndex[LightCounter] > 0.5) && (_Udon_ShadowMapIndex[LightCounter] < 1.5) && (_EnableShadowCasting > 0.5)) || (_Udon_ShadowMapIndex[LightCounter] > 2.5)) && _EnableShadowCasting)
-                    {
+                    if ((((_Udon_ShadowMapIndex[LightCounter] > 0.5) && (_Udon_ShadowMapIndex[LightCounter] < 1.5) && (_EnableShadowCasting > 0.5)) || (_Udon_ShadowMapIndex[LightCounter] > 2.5)) && _EnableShadowCasting)                    {
                         float4 sc1 = SampleShadowcasterPlaneWS_Basis(
                             _Udon_LightPositions[LightCounter].xyz, i.worldPos,
                             _Udon_Plane_Origin_1.xyz, _Udon_Plane_Uinv_1.xyz, _Udon_Plane_Vinv_1.xyz, _Udon_Plane_Normal_1.xyz,
@@ -184,27 +218,20 @@ Shader "DeMuenu/MoonlightVRC/Standard_Lightmap_2SP"
                         }
                     }
 
-                    dmax = dmax + contrib * float4(LightColor, 1) * NdotL * ShadowCasterMult_1 * ShadowCasterMult_2; 
+                    dmax = dmax + contrib * float4(LightColor, 1) * NdotL * ShadowCasterMult_1 * ShadowCasterMult_2;
+
+                    specularAccum += LightColor * contrib * blinnPhong * F * specularStrength * ShadowCasterMult_1.rgb * ShadowCasterMult_2.rgb;
 
                 }
+                
                 //dmax.xyz = min(dmax * dIntensity, 1.0);
                 dmax.w = 1.0;
 
                 //Moonlight END
 
-                fixed3 lm = 0;
-                #ifdef LIGHTMAP_ON
-                    // Decode handles RGBM/DoubleLDR and linear/gamma differences for you.
-                    lm = DecodeLightmap(UNITY_SAMPLE_TEX2D(unity_Lightmap, i.lmuv));
-
-                    #ifdef DIRLIGHTMAP_COMBINED
-                        // Directional lightmaps add dominant direction; improves shading on normal-mapped/curved surfaces
-                        half4 dirTex = UNITY_SAMPLE_TEX2D_SAMPLER(unity_LightmapInd,unity_Lightmap, i.lmuv);
-                        lm = DecodeDirectionalLightmap(lm, dirTex, normalize(i.worldNormal));
-                    #endif
-                #endif
-
-                return col * _Color * (dmax + float4(lm, 1)) + emmis * _EmmissiveStrength * _EmmissiveColor;
+                float3 diffuse = col.rgb * _Color.rgb * dmax.rgb;
+                float3 specular = specularAccum;
+                return float4(diffuse + specular + emmis.rgb * _EmmissiveStrength * _EmmissiveColor.rgb, 1.0);
             }
             ENDCG
         }

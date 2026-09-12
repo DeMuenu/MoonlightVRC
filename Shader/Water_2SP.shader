@@ -1,4 +1,4 @@
-Shader "DeMuenu/World/Hoppou/WaterFlat_2SP"
+Shader "DeMuenu/MoonlightVRC/WaterFlat_2SP"
 {
     Properties
     {
