@@ -119,27 +119,22 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_PBRish_WS-UV"
                 return saturate(F0 + (1.0 - F0) * f);
             }
 
+            
+            
+            
             v2f vert (appdata v)
             {
                 v2f o;
                 o.vertex = UnityObjectToClipPos(v.vertex);
-                o.uv = TRANSFORM_TEX(v.uv, _MainTex);
-                o.normUV = TRANSFORM_TEX(v.uv, _NormalMap);
-                o.uvEmmis = TRANSFORM_TEX(v.uv, _EmmisiveText);
+                o.uv = v.uv; 
 
+                // We no longer need tangent/bitangent math since triplanar normals are calculated in World Space
                 float3 nWS = UnityObjectToWorldNormal(v.normal);
-                float3 tWS = normalize(UnityObjectToWorldDir(v.tangent.xyz));
-                float3 bWS = normalize(cross(nWS, tWS) * v.tangent.w);
-
-                o.worldNormal   = nWS;
-                o.worldTangent  = tWS;
-                o.worldBitangent= bWS;
-
+                o.worldNormal = nWS;
 
                 //Moonlight Vertex
                 float4 wp = mul(unity_ObjectToWorld, v.vertex);
                 o.worldPos = wp.xyz;
-                //o.worldNormal = UnityObjectToWorldNormal(v.normal);
                 //Moonlight Vertex END
                 
                 return o;
@@ -147,23 +142,20 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_PBRish_WS-UV"
 
             fixed4 frag (v2f i) : SV_Target
             {
-                // sample the texture
-                fixed4 col = tex2D(_MainTex, i.uv);
-                fixed4 norm = tex2D(_NormalMap, i.normUV);
+                // Calculate Triplanar Blend Weights based on the World Normal
+                float3 blendWeights = abs(i.worldNormal);
+                blendWeights = pow(blendWeights, 4); // Power of 4 sharpens the transition lines between axes
+                blendWeights /= dot(blendWeights, float3(1, 1, 1)); // Normalize so they sum to 1
 
-                fixed4 emmis = tex2D(_EmmisiveText, i.uvEmmis);
+                // Sample the textures using Triplanar
+                fixed4 col = SampleTriplanar(_MainTex, i.worldPos, blendWeights, _MainTex_ST);
+                fixed4 emmis = SampleTriplanar(_EmmisiveText, i.worldPos, blendWeights, _EmmisiveText_ST);
+                
+                // Triplanar Normal Map Calculation (directly outputs a perturbed World Normal)
+                float3 N = SampleTriplanarNormal(_NormalMap, i.worldPos, i.worldNormal, blendWeights, _NormalMap_ST, _NormalMapStrength);
 
-
-                //Moonlight
-                float3 nTS = UnpackNormal(norm);
-                float3 NmapWS = normalize(i.worldTangent * nTS.x +
-                                        i.worldBitangent * nTS.y +
-                                        i.worldNormal   * nTS.z);
-                float3 N = normalize(lerp(normalize(i.worldNormal), NmapWS, saturate(_NormalMapStrength)));
-
-
-                //Metallicness
-                float metallic = tex2D(_MetallicTex, i.uv).r * _MetallicMult;
+                // Metallicness (Shares MainTex ST scaling to save instruction count)
+                float metallic = SampleTriplanar(_MetallicTex, i.worldPos, blendWeights, _MainTex_ST).r * _MetallicMult;
                 float3 albedo = col.rgb * _Color.rgb;
 
                 // 1. Darken the diffuse color based on metalness
@@ -179,7 +171,8 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_PBRish_WS-UV"
 
                 float3 specularAccum = 0;
 
-                float roughness = tex2D(_RoughnessMap, i.uv).r * _RoughnessMult;
+                // Roughness
+                float roughness = SampleTriplanar(_RoughnessMap, i.worldPos, blendWeights, _MainTex_ST).r * _RoughnessMult;
                 float smoothness = 1.0 - saturate(roughness);
 
 
@@ -190,7 +183,6 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_PBRish_WS-UV"
                 {
                     InLoopSetup(_Udon_LightPositions, LightCounter, count, i); //defines distanceFromLight, contrib
 
-                    
                     //Lambertian diffuse
                     Lambert(_Udon_LightPositions[LightCounter].xyz ,i, N); //defines NdotL
 
@@ -211,58 +203,53 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_PBRish_WS-UV"
                     float VdotH = saturate(dot(V, H));
                     float3 F = SchlickFresnel(VdotH, specularTint, _FresnelPower);
                     
-
                     LightTypeCalculations(_Udon_LightColors, LightCounter, i, NdotL, dIntensity, _Udon_LightPositions[LightCounter].a, _Udon_LightPositions[LightCounter].xyz);
-                    
-                    float4 ShadowCasterMult_1 = 1;
-                    float4 ShadowCasterMult_2 = 1;
-
-                    if ((((_Udon_ShadowMapIndex[LightCounter] > 0.5) && (_Udon_ShadowMapIndex[LightCounter] < 1.5) && (_EnableShadowCasting > 0.5)) || (_Udon_ShadowMapIndex[LightCounter] > 2.5)) && _EnableShadowCasting)                    {
-                        float4 sc1 = SampleShadowcasterPlaneWS_Basis(
-                            _Udon_LightPositions[LightCounter].xyz, i.worldPos,
-                            _Udon_Plane_Origin_1.xyz, _Udon_Plane_Uinv_1.xyz, _Udon_Plane_Vinv_1.xyz, _Udon_Plane_Normal_1.xyz,
-                            _Udon_shadowCasterTex_1, _Udon_OutSideColor_1, _Udon_shadowCasterColor_1, _BlurPixels, _Udon_shadowCasterTex_1_TexelSize.xy);
-                        ShadowCasterMult_1 = max(sc1, _Udon_MinBrightnessShadow_1);
-                    }
-                    if (_Udon_ShadowMapIndex[LightCounter] > 1.5 && (_EnableShadowCasting > 0.5))
-                    {
-                        half smIndex = _Udon_ShadowMapIndex[LightCounter];
-                        if ((smIndex > 0.5 && smIndex < 1.5) || smIndex > 2.5)
-                        {
-                            float4 sc1 = SampleShadowcasterPlaneWS_Basis(
-                                _Udon_LightPositions[LightCounter].xyz, i.worldPos,
-                                _Udon_Plane_Origin_1.xyz, _Udon_Plane_Uinv_1.xyz, _Udon_Plane_Vinv_1.xyz, _Udon_Plane_Normal_1.xyz,
-                                _Udon_shadowCasterTex_1, _Udon_OutSideColor_1, _Udon_shadowCasterColor_1, _BlurPixels, _Udon_shadowCasterTex_1_TexelSize.xy);
-                            ShadowCasterMult_1 = max(sc1, _Udon_MinBrightnessShadow_1);
-                        }
-                        if (smIndex > 1.5)
-                        {
-                            float4 sc2 = SampleShadowcasterPlaneWS_Basis(
-                                _Udon_LightPositions[LightCounter].xyz, i.worldPos,
-                                _Udon_Plane_Origin_2.xyz, _Udon_Plane_Uinv_2.xyz, _Udon_Plane_Vinv_2.xyz, _Udon_Plane_Normal_2.xyz,
-                                _Udon_shadowCasterTex_2, _Udon_OutSideColor_2, _Udon_shadowCasterColor_2, _BlurPixels, _Udon_shadowCasterTex_2_TexelSize.xy);
-                            ShadowCasterMult_2 = max(sc2, _Udon_MinBrightnessShadow_2);
-                        }
-                    }
-
-                    dmax = dmax + contrib * float4(LightColor, 1) * NdotL * ShadowCasterMult_1 * ShadowCasterMult_2;
-
-                    specularAccum += LightColor * contrib * blinnPhong * F * _ReflectionStrength * ShadowCasterMult_1.rgb * ShadowCasterMult_2.rgb;
+                    //
+                    //float4 ShadowCasterMult_1 = 1;
+                    //float4 ShadowCasterMult_1 = 1;
+                    //float4 ShadowCasterMult_2 = 1;
+//
+                    //if ((((_Udon_ShadowMapIndex[LightCounter] > 0.5) && (_Udon_ShadowMapIndex[LightCounter] < 1.5) && (_EnableShadowCasting > 0.5)) || (_Udon_ShadowMapIndex[LightCounter] > 2.5)) && _EnableShadowCasting)                    {
+                    //    float4 sc1 = SampleShadowcasterPlaneWS_Basis(
+                    //        _Udon_LightPositions[LightCounter].xyz, i.worldPos,
+                    //        _Udon_Plane_Origin_1.xyz, _Udon_Plane_Uinv_1.xyz, _Udon_Plane_Vinv_1.xyz, _Udon_Plane_Normal_1.xyz,
+                    //        _Udon_shadowCasterTex_1, _Udon_OutSideColor_1, _Udon_shadowCasterColor_1, _BlurPixels, _Udon_shadowCasterTex_1_TexelSize.xy);
+                    //    ShadowCasterMult_1 = max(sc1, _Udon_MinBrightnessShadow_1);
+                    //}
+                    //if (_Udon_ShadowMapIndex[LightCounter] > 1.5 && (_EnableShadowCasting > 0.5))
+                    //{
+                    //    half smIndex = _Udon_ShadowMapIndex[LightCounter];
+                    //    if ((smIndex > 0.5 && smIndex < 1.5) || smIndex > 2.5)
+                    //    {
+                    //        float4 sc1 = SampleShadowcasterPlaneWS_Basis(
+                    //            _Udon_LightPositions[LightCounter].xyz, i.worldPos,
+                    //            _Udon_Plane_Origin_1.xyz, _Udon_Plane_Uinv_1.xyz, _Udon_Plane_Vinv_1.xyz, _Udon_Plane_Normal_1.xyz,
+                    //            _Udon_shadowCasterTex_1, _Udon_OutSideColor_1, _Udon_shadowCasterColor_1, _BlurPixels, _Udon_shadowCasterTex_1_TexelSize.xy);
+                    //        ShadowCasterMult_1 = max(sc1, _Udon_MinBrightnessShadow_1);
+                    //    }
+                    //    if (smIndex > 1.5)
+                    //    {
+                    //        float4 sc2 = SampleShadowcasterPlaneWS_Basis(
+                    //            _Udon_LightPositions[LightCounter].xyz, i.worldPos,
+                    //            _Udon_Plane_Origin_2.xyz, _Udon_Plane_Uinv_2.xyz, _Udon_Plane_Normal_2.xyz,
+                    //            _Udon_shadowCasterTex_2, _Udon_OutSideColor_2, _Udon_shadowCasterColor_2, _BlurPixels, _Udon_shadowCasterTex_2_TexelSize.xy);
+                    //        ShadowCasterMult_2 = max(sc2, _Udon_MinBrightnessShadow_2);
+                    //    }
+                    //}
+//
+                    dmax = dmax + contrib * float4(LightColor, 1) * NdotL; // * ShadowCasterMult_1 * ShadowCasterMult_2;
+                    specularAccum += LightColor * contrib * blinnPhong * F * _ReflectionStrength; // * ShadowCasterMult_1.rgb * ShadowCasterMult_2.rgb;
                 }
                 
-                //dmax.xyz = min(dmax * dIntensity, 1.0);
                 dmax.w = 1.0;
 
-                //Ambient Occlusion
-                float aoRaw = tex2D(_OcclusionMap, i.uv).r;
+                // Ambient Occlusion
+                float aoRaw = SampleTriplanar(_OcclusionMap, i.worldPos, blendWeights, _MainTex_ST).r;
                 float ao = lerp(1.0, aoRaw, _OcclusionStrength);
 
                 float3 diffuse = diffuseColor * dmax.rgb * ao;
-
                 float3 specular = specularAccum * ao;
-
                 float3 emission = emmis.rgb * _EmmissiveStrength * _EmmissiveColor.rgb;
-
                 //Moonlight END
 
                 return float4(diffuse + specular + emission, 1.0);
@@ -270,6 +257,5 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_PBRish_WS-UV"
             ENDCG
         }
     }
-
     FallBack "Diffuse"
 }
