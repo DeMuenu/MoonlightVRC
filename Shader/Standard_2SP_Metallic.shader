@@ -14,6 +14,9 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_Metallic"
         _MetallicTex ("Metallic Texture", 2D) = "white" {}
 
         _MetallicMult ("Metallic Multiplier", Range(0,1)) = 0
+
+        _RoughnessMap ("Roughness Map", 2D) = "white" {}
+        _RoughnessMult ("Roughness Multiplier", Range(0,1)) = 1
         
         _F0 ("F0", Range(0,1)) = 0.02
         _FresnelPower ("Fresnel Power", Range(1,8)) = 5
@@ -97,6 +100,9 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_Metallic"
 
             sampler2D _MetallicTex;
             float _MetallicMult;
+
+            sampler2D _RoughnessMap;
+            float _RoughnessMult;
             
             float _F0, _FresnelPower, _ReflectionStrength;
 
@@ -153,9 +159,12 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_Metallic"
                 float3 V = normalize(_WorldSpaceCameraPos - i.worldPos);
                 float3 R = reflect(-V, N);  //for reflection vector
                 float  NoV = saturate(dot(N, V));
-                float fresnelTerm = SchlickFresnel(NoV, _F0, _FresnelPower);
                 float specularStrength = lerp(_F0, 1.0, metallic) * _ReflectionStrength;
                 float3 specularAccum = 0;
+
+                float roughness = tex2D(_RoughnessMap, i.uv).r * _RoughnessMult;
+                float smoothness = 1.0 - saturate(roughness);
+
 
                 OutLoopSetup(i, _Udon_PlayerCount) //defines count, N, dmax, dIntensity
 
@@ -169,20 +178,21 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_Metallic"
                     Lambert(_Udon_LightPositions[LightCounter].xyz ,i, N); //defines NdotL
 
                     // --- Specular (Blinn-Phong) ---
-                    //float3 L = normalize(_Udon_LightPositions[LightCounter].xyz - i.worldPos);
                     float3 H = normalize(V + L);
                     float NdotH = saturate(dot(N, H));
                     float NdotL_spec = saturate(dot(N, L));
 
-                    // Gloss from metallic map: more metallic = sharper highlight
-                    // Adjust the multiplier (64.0) to taste
-                    float gloss = lerp(8.0, 256.0, metallic);
-                    float blinnPhong = pow(NdotH, gloss) * NdotL_spec;
+                    // Smoothness of 0 gives a power of 2 (very wide/rough)
+                    // Smoothness of 1 gives a power of ~2048 (mirror-like)
+                    float gloss = exp2(11.0 * smoothness + 1.0);
 
-                    // Fresnel per-light (based on VdotH for accuracy)
+                    // To maintain energy conservation, sharper highlights should be brighter.
+                    float energyConservation = (gloss + 2.0) / 8.0;
+                    float blinnPhong = pow(NdotH, gloss) * NdotL_spec * energyConservation;
+
+                    // Fresnel per-light (calculates F for the specularAccum line below)
                     float VdotH = saturate(dot(V, H));
                     float F = SchlickFresnel(VdotH, _F0, _FresnelPower);
-
                     
 
                     LightTypeCalculations(_Udon_LightColors, LightCounter, i, NdotL, dIntensity, _Udon_LightPositions[LightCounter].a, _Udon_LightPositions[LightCounter].xyz);
