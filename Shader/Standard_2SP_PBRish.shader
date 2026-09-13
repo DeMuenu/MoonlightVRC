@@ -1,4 +1,4 @@
-Shader "DeMuenu/MoonlightVRC/Standard_2SP_Metallic"
+Shader "DeMuenu/MoonlightVRC/Standard_2SP_PBRish"
 {
     Properties
     {
@@ -106,7 +106,7 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_Metallic"
             
             float _F0, _FresnelPower, _ReflectionStrength;
 
-            inline float SchlickFresnel(float NoV, float F0, float power)
+            inline float3 SchlickFresnel(float NoV, float3 F0, float power)
             {
                 float f = pow(saturate(1.0 - NoV), power);
                 return saturate(F0 + (1.0 - F0) * f);
@@ -155,11 +155,21 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_Metallic"
                 float3 N = normalize(lerp(normalize(i.worldNormal), NmapWS, saturate(_NormalMapStrength)));
 
 
+                //Metallicness
                 float metallic = tex2D(_MetallicTex, i.uv).r * _MetallicMult;
+                float3 albedo = col.rgb * _Color.rgb;
+
+                // 1. Darken the diffuse color based on metalness
+                float3 diffuseColor = albedo * (1.0 - metallic);
+
+                // 2. Tint the reflection. Non-metals use base F0, metals use their Albedo color.
+                float3 baseF0 = float3(_F0, _F0, _F0);
+                float3 specularTint = lerp(baseF0, albedo, metallic);
+
                 float3 V = normalize(_WorldSpaceCameraPos - i.worldPos);
-                float3 R = reflect(-V, N);  //for reflection vector
-                float  NoV = saturate(dot(N, V));
-                float specularStrength = lerp(_F0, 1.0, metallic) * _ReflectionStrength;
+                float3 R = reflect(-V, N);
+                float NoV = saturate(dot(N, V));
+
                 float3 specularAccum = 0;
 
                 float roughness = tex2D(_RoughnessMap, i.uv).r * _RoughnessMult;
@@ -192,7 +202,7 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_Metallic"
 
                     // Fresnel per-light (calculates F for the specularAccum line below)
                     float VdotH = saturate(dot(V, H));
-                    float F = SchlickFresnel(VdotH, _F0, _FresnelPower);
+                    float3 F = SchlickFresnel(VdotH, specularTint, _FresnelPower);
                     
 
                     LightTypeCalculations(_Udon_LightColors, LightCounter, i, NdotL, dIntensity, _Udon_LightPositions[LightCounter].a, _Udon_LightPositions[LightCounter].xyz);
@@ -230,8 +240,7 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_Metallic"
 
                     dmax = dmax + contrib * float4(LightColor, 1) * NdotL * ShadowCasterMult_1 * ShadowCasterMult_2;
 
-                    specularAccum += LightColor * contrib * blinnPhong * F * specularStrength * ShadowCasterMult_1.rgb * ShadowCasterMult_2.rgb;
-
+                    specularAccum += LightColor * contrib * blinnPhong * F * _ReflectionStrength * ShadowCasterMult_1.rgb * ShadowCasterMult_2.rgb;
                 }
                 
                 //dmax.xyz = min(dmax * dIntensity, 1.0);
@@ -239,7 +248,7 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_Metallic"
 
                 //Moonlight END
 
-                float3 diffuse = col.rgb * _Color.rgb * dmax.rgb;
+                float3 diffuse = diffuseColor * dmax.rgb;
                 float3 specular = specularAccum;
                 return float4(diffuse + specular + emmis.rgb * _EmmissiveStrength * _EmmissiveColor.rgb, 1.0);
             }
