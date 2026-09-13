@@ -7,6 +7,9 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_PBRish"
         _NormalMapStrength ("Normal Map Strength", Range(0,1)) = 1
         _Color ("Color", Color) = (1,1,1,1)
 
+        _OcclusionMap ("Ambient Occlusion", 2D) = "white" {}
+        _OcclusionStrength ("Occlusion Strength", Range(0,1)) = 1
+
         _EmmisiveText ("Emmissive Texture", 2D) = "white" {}
         _EmmissiveColor ("Emmissive Color", Color) = (1,1,1,1)
         _EmmissiveStrength ("Emmissive Strength", Range(0,10)) = 0
@@ -20,7 +23,7 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_PBRish"
         
         _F0 ("F0", Range(0,1)) = 0.02
         _FresnelPower ("Fresnel Power", Range(1,8)) = 5
-        _ReflectionStrength ("Reflection Strength", Range(0,1)) = 0.7
+        _ReflectionStrength ("Reflection Strength", Range(0,1)) = 1.0
         
 
         //Moonlight
@@ -90,6 +93,9 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_PBRish"
             float4 _Color;
             float _NormalMapStrength;
             
+
+            sampler2D _OcclusionMap;
+            float _OcclusionStrength;
 
 
             sampler2D _EmmisiveText;
@@ -246,11 +252,19 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_PBRish"
                 //dmax.xyz = min(dmax * dIntensity, 1.0);
                 dmax.w = 1.0;
 
+                //Ambient Occlusion
+                float aoRaw = tex2D(_OcclusionMap, i.uv).r;
+                float ao = lerp(1.0, aoRaw, _OcclusionStrength);
+
+                float3 diffuse = diffuseColor * dmax.rgb * ao;
+
+                float3 specular = specularAccum * ao;
+
+                float3 emission = emmis.rgb * _EmmissiveStrength * _EmmissiveColor.rgb;
+
                 //Moonlight END
 
-                float3 diffuse = diffuseColor * dmax.rgb;
-                float3 specular = specularAccum;
-                return float4(diffuse + specular + emmis.rgb * _EmmissiveStrength * _EmmissiveColor.rgb, 1.0);
+                return float4(diffuse + specular + emission, 1.0);
             }
             ENDCG
         }
