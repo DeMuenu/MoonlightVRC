@@ -196,14 +196,7 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_PBRish_Lightprobes"
 
                     // To maintain energy conservation, sharper highlights should be brighter.
                     float energyConservation = (gloss + 2.0) / 8.0;
-                    float blinnPhong = pow(NdotH, gloss) * NdotL_spec * energyConservation;
-
-                    // Fresnel per-light (calculates F for the specularAccum line below)
-                    float VdotH = saturate(dot(V, H));
-                    float3 F = SchlickFresnel(VdotH, specularTint, _FresnelPower);
-
-                    LightTypeCalculations(_Udon_LightColors, LightCounter, i, NdotL, dIntensity, _Udon_LightPositions[LightCounter].a, _Udon_LightPositions[LightCounter].xyz);
-                    
+                    float blinnPhong = pow(NdotH, glo
                     float4 ShadowCasterMult_1 = 1;
                     float4 ShadowCasterMult_2 = 1;
 
@@ -276,8 +269,13 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_PBRish_Lightprobes"
                     }
                 #endif
 
-                float3 envFresnel = SchlickFresnel(NoV, specularTint, _FresnelPower);
-                float3 reflectionProbeColor = envColor * envFresnel * _ReflectionStrength;
+                float fresnelFactor = pow(saturate(1.0 - NoV), _FresnelPower);
+                float3 envFresnel = specularTint + (max(float3(smoothness, smoothness, smoothness), specularTint) - specularTint) * fresnelFactor;
+
+                float surfaceReduction = 1.0 / (roughness * roughness + 1.0);
+
+                float3 reflectionProbeColor = envColor * envFresnel * surfaceReduction * _ReflectionStrength;
+                
 
                 float3 diffuse = diffuseColor * (dmax.rgb + lightProbe) * ao;
 

@@ -310,8 +310,13 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_PBRish_Baked"
                     }
                 #endif
 
-                float3 envFresnel = SchlickFresnel(NoV, specularTint, _FresnelPower);
-                float3 reflectionProbeColor = envColor * envFresnel * _ReflectionStrength;
+                float fresnelFactor = pow(saturate(1.0 - NoV), _FresnelPower);
+                float3 envFresnel = specularTint + (max(float3(smoothness, smoothness, smoothness), specularTint) - specularTint) * fresnelFactor;
+
+                float surfaceReduction = 1.0 / (roughness * roughness + 1.0);
+
+                float3 reflectionProbeColor = envColor * envFresnel * surfaceReduction * _ReflectionStrength;
+
 
                 float3 diffuse = diffuseColor * (dmax.rgb + lm) * ao;
 
