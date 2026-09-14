@@ -1,4 +1,4 @@
-Shader "DeMuenu/MoonlightVRC/Standard_2SP_PBRish_Baked"
+Shader "DeMuenu/MoonlightVRC/Standard_2SP_PBRish_Lightprobes"
 {
     Properties
     {
@@ -36,8 +36,6 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_PBRish_Baked"
 
         [Enum(UnityEngine.Rendering.CullMode)] _Cull ("Cull Mode", Float) = 2
 
-
-
     }
     SubShader
     {
@@ -50,8 +48,6 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_PBRish_Baked"
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
-            #pragma multi_compile _ LIGHTMAP_ON
-            #pragma multi_compile _ DIRLIGHTMAP_COMBINED
             #pragma multi_compile_local _ UNITY_SPECCUBE_BOX_PROJECTION
             #pragma multi_compile_local _ UNITY_SPECCUBE_BLENDING
 
@@ -64,15 +60,12 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_PBRish_Baked"
             #include "UnityStandardUtils.cginc"
             #include "Includes/Moonlight.hlsl"
 
-
-
             struct appdata
             {
                 float4 vertex : POSITION;
                 float2 uv : TEXCOORD0;
                 float3 normal : NORMAL;
                 float4 tangent : TANGENT;
-                float2 uv2    : TEXCOORD1;
             };
 
             struct v2f
@@ -89,12 +82,6 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_PBRish_Baked"
                 float3 worldPos : TEXCOORD2;
                 float3 worldNormal: TEXCOORD3;
                 //Moonlight END
-
-                #ifdef LIGHTMAP_ON
-                    float2 lmuv : TEXCOORD8;
-                #endif
-
-                
             };
 
             sampler2D _MainTex;
@@ -145,17 +132,11 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_PBRish_Baked"
                 o.worldTangent  = tWS;
                 o.worldBitangent= bWS;
 
-
                 //Moonlight Vertex
                 float4 wp = mul(unity_ObjectToWorld, v.vertex);
                 o.worldPos = wp.xyz;
-                //o.worldNormal = UnityObjectToWorldNormal(v.normal);
                 //Moonlight Vertex END
 
-                #ifdef LIGHTMAP_ON
-                    o.lmuv = v.uv2 * unity_LightmapST.xy + unity_LightmapST.zw;
-                #endif
-                
                 return o;
             }
 
@@ -167,14 +148,12 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_PBRish_Baked"
 
                 fixed4 emmis = tex2D(_EmmisiveText, i.uvEmmis);
 
-
                 //Moonlight
                 float3 nTS = UnpackNormal(norm);
                 float3 NmapWS = normalize(i.worldTangent * nTS.x +
                                         i.worldBitangent * nTS.y +
                                         i.worldNormal   * nTS.z);
                 float3 N = normalize(lerp(normalize(i.worldNormal), NmapWS, saturate(_NormalMapStrength)));
-
 
                 //Metallicness
                 float metallic = tex2D(_MetallicTex, i.uv).r * _MetallicMult;
@@ -196,7 +175,6 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_PBRish_Baked"
                 float roughness = tex2D(_RoughnessMap, i.uv).r * _RoughnessMult;
                 float smoothness = 1.0 - saturate(roughness);
 
-
                 OutLoopSetup(i, _Udon_PlayerCount) //defines count, N, dmax, dIntensity
 
                 [loop]
@@ -204,7 +182,6 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_PBRish_Baked"
                 {
                     InLoopSetup(_Udon_LightPositions, LightCounter, count, i); //defines distanceFromLight, contrib
 
-                    
                     //Lambertian diffuse
                     Lambert(_Udon_LightPositions[LightCounter].xyz ,i, N); //defines NdotL
 
@@ -224,7 +201,6 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_PBRish_Baked"
                     // Fresnel per-light (calculates F for the specularAccum line below)
                     float VdotH = saturate(dot(V, H));
                     float3 F = SchlickFresnel(VdotH, specularTint, _FresnelPower);
-                    
 
                     LightTypeCalculations(_Udon_LightColors, LightCounter, i, NdotL, dIntensity, _Udon_LightPositions[LightCounter].a, _Udon_LightPositions[LightCounter].xyz);
                     
@@ -264,19 +240,9 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_PBRish_Baked"
                     specularAccum += LightColor * contrib * blinnPhong * F * _ReflectionStrength * ShadowCasterMult_1.rgb * ShadowCasterMult_2.rgb;
                 }
 
-                fixed3 lm = 0;
-                #ifdef LIGHTMAP_ON
-                    // Decode handles RGBM/DoubleLDR and linear/gamma differences for you.
-                    lm = DecodeLightmap(UNITY_SAMPLE_TEX2D(unity_Lightmap, i.lmuv));
+                // Light Probes (Spherical Harmonics)
+                float3 lightProbe = max(float3(0.0, 0.0, 0.0), ShadeSH9(float4(N, 1.0)));
 
-                    #ifdef DIRLIGHTMAP_COMBINED
-                        // Directional lightmaps add dominant direction; improves shading on normal-mapped/curved surfaces
-                        half4 dirTex = UNITY_SAMPLE_TEX2D_SAMPLER(unity_LightmapInd,unity_Lightmap, i.lmuv);
-                        lm = DecodeDirectionalLightmap(lm, dirTex, normalize(i.worldNormal));
-                    #endif
-                #endif
-                
-                //dmax.xyz = min(dmax * dIntensity, 1.0);
                 dmax.w = 1.0;
 
                 //Ambient Occlusion
@@ -313,7 +279,7 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_PBRish_Baked"
                 float3 envFresnel = SchlickFresnel(NoV, specularTint, _FresnelPower);
                 float3 reflectionProbeColor = envColor * envFresnel * _ReflectionStrength;
 
-                float3 diffuse = diffuseColor * (dmax.rgb + lm) * ao;
+                float3 diffuse = diffuseColor * (dmax.rgb + lightProbe) * ao;
 
                 float3 specular = (specularAccum + reflectionProbeColor) * ao;
 
