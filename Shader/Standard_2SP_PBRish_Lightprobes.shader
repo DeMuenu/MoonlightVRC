@@ -45,9 +45,12 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_PBRish_Lightprobes"
 
         Pass
         {
+            Tags { "LightMode" = "ForwardBase" }
+
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma multi_compile_fwdbase
             #pragma multi_compile_local _ UNITY_SPECCUBE_BOX_PROJECTION
             #pragma multi_compile_local _ UNITY_SPECCUBE_BLENDING
 
@@ -119,6 +122,7 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_PBRish_Lightprobes"
             v2f vert (appdata v)
             {
                 v2f o;
+                UNITY_INITIALIZE_OUTPUT(v2f, o);
                 o.vertex = UnityObjectToClipPos(v.vertex);
                 o.uv = TRANSFORM_TEX(v.uv, _MainTex);
                 o.normUV = TRANSFORM_TEX(v.uv, _NormalMap);
@@ -241,7 +245,7 @@ Shader "DeMuenu/MoonlightVRC/Standard_2SP_PBRish_Lightprobes"
                 }
 
                 // Light Probes (Spherical Harmonics)
-                float3 lightProbe = max(float3(0.0, 0.0, 0.0), ShadeSH9(float4(N, 1.0)));
+                float3 lightProbe = max(float3(0.0, 0.0, 0.0), ShadeSH9(half4(N, 1.0)));
 
                 dmax.w = 1.0;
 
