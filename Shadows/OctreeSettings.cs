@@ -9,6 +9,12 @@ public class OctreeSettings : MonoBehaviour
     public int textureWidth = 512;
     public int textureHeight = 512;
 
+    [Tooltip("The parent transform whose children will be baked. Defaults to this object if left empty.")]
+    public Transform probeRootTransform;
+
+    [Tooltip("Path within the Assets folder to save the texture asset.")]
+    public string probePositionSavePath = "Assets/MoonlightVRC/Shadows/BakedNodePositions.asset";
+
     private void OnDrawGizmosSelected()
     {
         // Visualize the bounding box in the scene view when the empty GameObject is selected

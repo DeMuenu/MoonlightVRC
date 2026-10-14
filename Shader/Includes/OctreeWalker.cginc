@@ -93,7 +93,7 @@ bool QueryNodeAtPos(float3 worldPos, out bool isOccupied, out float3 nodeCenter,
     uint currentNodeIndex = 0;
     int depth = 0;
 
-    [unroll(10)]
+    [loop]
     for (int i = 0; i < 10; i++)
     {
         if (depth >= _MaxWalkDepth) break;
@@ -153,7 +153,7 @@ bool CheckLineInterrupted(float3 pos1, float3 pos2, int maxSteps, out float3 hit
 
     int steps = clamp(maxSteps, 2, 64);
 
-    [unroll(64)]
+    [loop]
     for (int i = 0; i < 64; i++)
     {
         if (i >= steps || travelled >= totalLength) break;
