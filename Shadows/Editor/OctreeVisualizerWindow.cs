@@ -4,8 +4,8 @@ using Unity.Collections;
 
 public class OctreeVisualizerWindow : EditorWindow
 {
+    private OctreeSettings settings;
     private Texture2D bakedTexture;
-    private Bounds rootBounds = new Bounds(Vector3.zero, Vector3.one * 10f);
     private int displayDepth = 4;
     private bool showOnlyOccupied = true;
     private bool drawInScene = true;
@@ -31,8 +31,9 @@ public class OctreeVisualizerWindow : EditorWindow
         GUILayout.Label("Octree Texture Visualizer", EditorStyles.boldLabel);
         EditorGUILayout.Space();
 
+        settings = (OctreeSettings)EditorGUILayout.ObjectField("Octree Settings Object", settings, typeof(OctreeSettings), true);
         bakedTexture = (Texture2D)EditorGUILayout.ObjectField("Baked Octree Texture", bakedTexture, typeof(Texture2D), false);
-        rootBounds = EditorGUILayout.BoundsField("Root Bounds", rootBounds);
+        
         displayDepth = EditorGUILayout.IntSlider("Display Max Depth", displayDepth, 0, 7);
         showOnlyOccupied = EditorGUILayout.Toggle("Show Only Occupied", showOnlyOccupied);
         drawInScene = EditorGUILayout.Toggle("Draw in Scene View", drawInScene);
@@ -46,16 +47,15 @@ public class OctreeVisualizerWindow : EditorWindow
         EditorGUILayout.HelpBox(
             "Cyan = Intermediate Node\n" +
             "Green = Leaf Node\n" +
-            "Ensure 'Read/Write Enabled' is checked on the texture import settings.", 
+            "Settings are pulled directly from the assigned OctreeSettings GameObject.", 
             MessageType.Info
         );
     }
 
     private void OnSceneGUI(SceneView sceneView)
     {
-        if (!drawInScene || bakedTexture == null) return;
+        if (!drawInScene || bakedTexture == null || settings == null) return;
 
-        // Verify texture format is RGBA64
         if (bakedTexture.format != TextureFormat.RGBA64)
         {
             return;
@@ -66,13 +66,11 @@ public class OctreeVisualizerWindow : EditorWindow
             NativeArray<ushort> pixelData = bakedTexture.GetPixelData<ushort>(0);
             if (!pixelData.IsCreated || pixelData.Length == 0) return;
 
-            // Traverse and draw from root (index 0)
-            DrawOctreeRecursive(0, rootBounds, 0, displayDepth, pixelData, showOnlyOccupied);
+            DrawOctreeRecursive(0, settings.bounds, 0, displayDepth, pixelData, showOnlyOccupied);
         }
         catch (System.Exception e)
         {
-            // Catch any potential read errors if texture settings aren't applied yet
-            Debug.LogWarning($"Octree Visualizer Error: {e.Message}. Make sure 'Read/Write Enabled' is enabled on the texture.");
+            Debug.LogWarning($"Octree Visualizer Error: {e.Message}");
         }
     }
 
@@ -84,18 +82,15 @@ public class OctreeVisualizerWindow : EditorWindow
         bool isOccupied = pixelData[baseIndex + 0] > 0;
         bool isLeaf = pixelData[baseIndex + 1] > 0;
 
-        // Filtering logic
         if (!onlyOccupied || isOccupied)
         {
             if (currentDepth <= maxDepth)
             {
-                // Color code: Green for leaves, Cyan for branches
                 Handles.color = isLeaf ? Color.green : Color.cyan;
                 Handles.DrawWireCube(bounds.center, bounds.size);
             }
         }
 
-        // Recurse into children if not a leaf and within depth limit
         if (!isLeaf && currentDepth < maxDepth)
         {
             Vector3 size = bounds.size;
@@ -106,7 +101,6 @@ public class OctreeVisualizerWindow : EditorWindow
             for (int i = 0; i < 8; i++)
             {
                 int childIndex = pixelData[baseIndex + 4 + i];
-                // Child index > 0 means a valid child exists
                 if (childIndex > 0)
                 {
                     Vector3 childCenter = min + new Vector3(
