@@ -168,21 +168,31 @@ bool CheckLineInterrupted(float3 pos1, float3 pos2, int maxSteps, out float3 hit
             return true; // Interrupted by an occupied node!
         }
 
-        // Calculate exact distance to exit the current node's bounding box along the ray
-        float3 t1 = (nodeCenter - nodeExtents - currentPos) / rayDir;
-        float3 t2 = (nodeCenter + nodeExtents - currentPos) / rayDir;
-        float3 tExit = max(t1, t2);
+        // Robust Ray-AABB intersection for the current node bounds
+        float3 boxMin = nodeCenter - nodeExtents;
+        float3 boxMax = nodeCenter + nodeExtents;
+
+        // Compute intersection t values for all 6 planes
+        float3 t0 = (boxMin - currentPos) / rayDir;
+        float3 t1 = (boxMax - currentPos) / rayDir;
         
-        float exitDist = 1e20f;
-        if (tExit.x > 0) exitDist = min(exitDist, tExit.x);
-        if (tExit.y > 0) exitDist = min(exitDist, tExit.y);
-        if (tExit.z > 0) exitDist = min(exitDist, tExit.z);
+        float3 tmin = min(t0, t1);
+        float3 tmax = max(t0, t1);
         
-        // Ensure forward progress with a tiny safety epsilon
+        // Find the distance to exit the current box along the ray
+        float exitDist = min(min(tmax.x, tmax.y), tmax.z);
+
+        // Ensure forward progress even if near boundaries, with a safety epsilon
         exitDist = max(exitDist, 0.001f);
 
         travelled += exitDist;
+        
+        // Advance currentPos and push slightly past the boundary into the next node
         currentPos = pos1 + rayDir * min(travelled, totalLength);
+        if (travelled < totalLength)
+        {
+            currentPos += rayDir * 0.0001f; // Bias to cross the boundary cleanly
+        }
     }
 
     hitPos = pos2;
