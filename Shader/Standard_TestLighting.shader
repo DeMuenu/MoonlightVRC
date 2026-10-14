@@ -133,41 +133,44 @@ Shader "DeMuenu/MoonlightVRC/Standard_ShadowTest"
                 return 1 - val;
             }
 
-            // Blending function for the 3 closest probes
-            float BlendClosestProbes(float3 worldPos, float2 lightmapUV, float lightmapIndex, int lightId)
-            {
-                // Sample the 3 closest probe indices from the Texture2DArray
-                float3 sampleCoords = float3(lightmapUV, lightmapIndex);
-                float4 encodedIndices = UNITY_SAMPLE_TEX2DARRAY(_ProbeIndexTexArray, sampleCoords);
-                int3 probeIndices = round(encodedIndices.rgb * 65535.0f);
+ // Blending function for the 3 closest probes (Squared distance only)
+float BlendClosestProbes(float3 worldPos, float2 lightmapUV, float lightmapIndex, int lightId)
+{
+    // Sample the 3 closest probe indices from the Texture2DArray
+    float3 sampleCoords = float3(lightmapUV, lightmapIndex);
+    float4 encodedIndices = UNITY_SAMPLE_TEX2DARRAY(_ProbeIndexTexArray, sampleCoords);
+    int3 probeIndices = round(encodedIndices.rgb * 65535.0f);
 
-                // Get world positions of the 3 closest probes
-                float3 p0 = GetProbePosition(probeIndices.x);
-                float3 p1 = GetProbePosition(probeIndices.y);
-                float3 p2 = GetProbePosition(probeIndices.z);
+    // Fetch world positions directly
+    float3 p0 = GetProbePosition(probeIndices.x);
+    float3 p1 = GetProbePosition(probeIndices.y);
+    float3 p2 = GetProbePosition(probeIndices.z);
 
-                // Compute distance-based weights (Inverse Distance Weighting)
-                float d0 = distance(worldPos, p0);
-                float d1 = distance(worldPos, p1);
-                float d2 = distance(worldPos, p2);
+    // Vector offsets from pixel to probes
+    float3 v0 = p0 - worldPos;
+    float3 v1 = p1 - worldPos;
+    float3 v2 = p2 - worldPos;
 
-                float w0 = 1.0f / (d0 + 1e-5f);
-                float w1 = 1.0f / (d1 + 1e-5f);
-                float w2 = 1.0f / (d2 + 1e-5f);
-                float weightSum = w0 + w1 + w2;
+    // Squared distances (avoids costly sqrt operations)
+    float sqrDist0 = dot(v0, v0);
+    float sqrDist1 = dot(v1, v1);
+    float sqrDist2 = dot(v2, v2);
 
-                w0 /= weightSum;
-                w1 /= weightSum;
-                w2 /= weightSum;
+    // Inverse distance weights
+    float w0 = 1.0f / (sqrDist0 + 1e-5f);
+    float w1 = 1.0f / (sqrDist1 + 1e-5f);
+    float w2 = 1.0f / (sqrDist2 + 1e-5f);
 
-                // Get values for each probe using its probe ID and the light ID
-                float val0 = GetProbeLightValue(probeIndices.x, lightId);
-                float val1 = GetProbeLightValue(probeIndices.y, lightId);
-                float val2 = GetProbeLightValue(probeIndices.z, lightId);
+    float weightSum = w0 + w1 + w2 + 1e-5f;
+    w0 /= weightSum;
+    w1 /= weightSum;
+    w2 /= weightSum;
 
-                // Blend and return the final value
-                return (val0 * w0) + (val1 * w1) + (val2 * w2);
-            }
+    // Fetch lighting values and blend
+    return (GetProbeLightValue(probeIndices.x, lightId) * w0) + 
+           (GetProbeLightValue(probeIndices.y, lightId) * w1) + 
+           (GetProbeLightValue(probeIndices.z, lightId) * w2);
+}
 
             v2f vert (appdata v)
             {

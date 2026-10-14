@@ -76,7 +76,7 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _ProbePosTex:
-        m_Texture: {fileID: 0}
+        m_Texture: {fileID: 2800000, guid: 3f8b4e96f56af3302b8e45030674dfea, type: 2}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _ShadowCalculationTex:
@@ -105,7 +105,7 @@ Material:
     - _NormalMapStrength: 1
     - _OcclusionStrength: 1
     - _Parallax: 0.02
-    - _ProbeCount: 343
+    - _ProbeCount: 2800
     - _SmoothnessTextureChannel: 0
     - _SpecularHighlights: 1
     - _SrcBlend: 1
