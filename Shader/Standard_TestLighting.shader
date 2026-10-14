@@ -130,7 +130,7 @@ Shader "DeMuenu/MoonlightVRC/Standard_ShadowTest"
                             (channelIndex == 1) ? col.g : 
                             (channelIndex == 2) ? col.b : col.a;
 
-                return val;
+                return 1 - val;
             }
 
             // Blending function for the 3 closest probes

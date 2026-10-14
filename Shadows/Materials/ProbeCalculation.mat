@@ -95,7 +95,7 @@ Material:
     m_Colors:
     - _BoundsCenter: {r: 0, g: 0, b: 0, a: 0}
     - _BoundsSize: {r: 20, g: 20, b: 20, a: 0}
-    - _CameraRenderTextureSize: {r: 256, g: 256, b: 0, a: 0}
+    - _CameraRenderTextureSize: {r: 1024, g: 1024, b: 0, a: 0}
     - _Color: {r: 1, g: 1, b: 1, a: 1}
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
   m_BuildTextureStacks: []

@@ -32,7 +32,8 @@ public class ProbeBaker : MonoBehaviour
             if (i < childCount)
             {
                 Transform child = settings.probeRootTransform.GetChild(i);
-                Vector3 pos = child.localPosition; 
+                // FIX: Use world position so it matches shader world positions (i.worldPos)
+                Vector3 pos = child.position; 
                 colors[i] = new Color(pos.x, pos.y, pos.z, 1.0f);
             }
             else
@@ -51,7 +52,7 @@ public class ProbeBaker : MonoBehaviour
         #endif
     }
 
-[ContextMenu("Bake Closest Probes Texture Array")]
+    [ContextMenu("Bake Closest Probes Texture Array")]
     public void BakeClosestProbesTexture()
     {
         #if UNITY_EDITOR
@@ -65,7 +66,8 @@ public class ProbeBaker : MonoBehaviour
         Vector3[] probePositions = new Vector3[childCount];
         for (int i = 0; i < childCount; i++)
         {
-            probePositions[i] = settings.probeRootTransform.GetChild(i).localPosition;
+            // FIX: Use world position here as well
+            probePositions[i] = settings.probeRootTransform.GetChild(i).position;
         }
 
         LightmapData[] lightmaps = LightmapSettings.lightmaps;
@@ -77,7 +79,6 @@ public class ProbeBaker : MonoBehaviour
 
         int lmCount = lightmaps.Length;
         
-        // Find the maximum width and height across all lightmap pages to ensure uniformity
         int maxWidth = 0;
         int maxHeight = 0;
         for (int i = 0; i < lmCount; i++)
@@ -89,7 +90,6 @@ public class ProbeBaker : MonoBehaviour
             }
         }
 
-        // Create a Texture2DArray using the uniform maximum dimensions
         Texture2DArray textureArray = new Texture2DArray(maxWidth, maxHeight, lmCount, TextureFormat.RGBAFloat, false);
         textureArray.filterMode = FilterMode.Point;
         textureArray.wrapMode = TextureWrapMode.Clamp;
@@ -101,10 +101,6 @@ public class ProbeBaker : MonoBehaviour
             Texture2D lmColorTex = lightmaps[lmIndex].lightmapColor;
             if (lmColorTex == null) continue;
 
-            int pWidth = lmColorTex.width;
-            int pHeight = lmColorTex.height;
-            
-            // Size the pixel array to match the uniform texture array dimensions
             Color[] indexPixels = new Color[maxWidth * maxHeight];
             for (int i = 0; i < indexPixels.Length; i++)
                 indexPixels[i] = Color.clear;
@@ -135,7 +131,6 @@ public class ProbeBaker : MonoBehaviour
                         uv2[v].x * scaleOffset.x + scaleOffset.z,
                         uv2[v].y * scaleOffset.y + scaleOffset.w
                     );
-                    // Scale UV pixels to match the maxWidth/maxHeight canvas
                     uvPixels[v] = new Vector2(lightmapUV.x * maxWidth, lightmapUV.y * maxHeight);
                 }
 
