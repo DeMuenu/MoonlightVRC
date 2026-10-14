@@ -7,9 +7,9 @@ Shader "DeMuenu/MoonlightVRC/backend/shadowCalculator"
         _BoundsCenter ("Bounds Center", Vector) = (0,0,0,0)
         _BoundsSize ("Bounds Size", Vector) = (10,10,10,0)
         _MaxWalkDepth ("Max Walk Depth", Int) = 5
-        _ProbeCount ("ProbeCount", Int) = 5   
+        _ProbeCount ("ProbeCount", Int) = 200   
 
-        _ProbePositionsTex ("Texture", 2D) = "white" {}
+        _ProbePositionsTex ("ProbePositionsTex", 2D) = "white" {}
 
         _CameraRenderTextureSize ("Camera Render Texture Size (Width, Height)", Vector) = (1920, 1080, 0, 0)
     }
@@ -28,7 +28,6 @@ Shader "DeMuenu/MoonlightVRC/backend/shadowCalculator"
             #pragma vertex vert
             #pragma fragment frag
             #include "UnityCG.cginc"
-            #include "Includes/OctreeWalker.cginc"
 
             struct appdata
             {
@@ -49,8 +48,11 @@ Shader "DeMuenu/MoonlightVRC/backend/shadowCalculator"
             float4 _BoundsSize;
             int _MaxWalkDepth;
 
+            #include "Includes/OctreeWalker.cginc"
+
 
             sampler2D _ProbePositionsTex;
+            float4 _ProbePositionsTex_TexelSize;
             sampler2D _OtherTex;
             float4 _CameraRenderTextureSize;
             float _CustomParam;
@@ -70,18 +72,38 @@ Shader "DeMuenu/MoonlightVRC/backend/shadowCalculator"
                 return o;
             }
 
+            float3 GetProbePosition(uint probeIndex)
+            {
+                uint textureWidth = (uint)_ProbePositionsTex_TexelSize.z;
+                uint2 probePixel = uint2(probeIndex % textureWidth, probeIndex / textureWidth);
+                float2 probeUV = (float2(probePixel) + 0.5) * _ProbePositionsTex_TexelSize.xy;
+                return tex2D(_ProbePositionsTex, probeUV).xyz;
+            }
+
             fixed4 frag (v2f i) : SV_Target
             {
                 float2 cameraRenderTextureSize = max(_CameraRenderTextureSize.xy, float2(1.0, 1.0));
                 int2 cameraPixelSize = int2(cameraRenderTextureSize);
                 
                 int2 pixelCoord = clamp(int2(i.uv * cameraRenderTextureSize), int2(0, 0), cameraPixelSize - 1);
-                float2 targetUV = (float2(pixelCoord) + 0.5) / cameraRenderTextureSize;
 
-                int perLightPixels
+                uint2 unsignedPixelCoord = (uint2)pixelCoord;
+                uint pixelWidth = (uint)cameraPixelSize.x;
+                uint baseIndex = (unsignedPixelCoord.y * pixelWidth + unsignedPixelCoord.x) * 4u;
+                uint probeCount = (uint)max(_ProbeCount, 1);
 
-                fixed4 baseCol = tex2D(_ProbePositionsTex, i.uv);
-                fixed4 finalCol = checker ? baseCol : otherTexPixel;
+
+                float3 hitPos;
+                uint sampleIndex1 = baseIndex;
+                uint sampleIndex2 = baseIndex + 1u;
+                uint sampleIndex3 = baseIndex + 2u;
+                uint sampleIndex4 = baseIndex + 3u;
+                float channel1 = (float)CheckLineInterrupted(_Udon_LightPositions[sampleIndex1 / probeCount].xyz, GetProbePosition(sampleIndex1 % probeCount), 32, hitPos);
+                float channel2 = (float)CheckLineInterrupted(_Udon_LightPositions[sampleIndex2 / probeCount].xyz, GetProbePosition(sampleIndex2 % probeCount), 32, hitPos);
+                float channel3 = (float)CheckLineInterrupted(_Udon_LightPositions[sampleIndex3 / probeCount].xyz, GetProbePosition(sampleIndex3 % probeCount), 32, hitPos);
+                float channel4 = (float)CheckLineInterrupted(_Udon_LightPositions[sampleIndex4 / probeCount].xyz, GetProbePosition(sampleIndex4 % probeCount), 32, hitPos);
+
+                fixed4 finalCol = fixed4(channel1, channel2, channel3, channel4);
 
                 return finalCol;
             }
