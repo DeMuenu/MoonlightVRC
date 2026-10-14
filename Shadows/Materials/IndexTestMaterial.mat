@@ -43,6 +43,10 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _EmmisiveText:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _MainTex:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
@@ -51,8 +55,16 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _NormalMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _OcclusionMap:
         m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _OctreeTex:
+        m_Texture: {fileID: 2800000, guid: 993cc6e74c1931668a72292d8e1a4ca9, type: 2}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _ParallaxMap:
@@ -64,21 +76,29 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _ProbePosTex:
-        m_Texture: {fileID: 2800000, guid: fa1b6904cbdba986fa0a23fc0f2cc28f, type: 2}
+        m_Texture: {fileID: 2800000, guid: 3f8b4e96f56af3302b8e45030674dfea, type: 2}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
+    - _BlurPixels: 0
     - _BumpScale: 1
+    - _Cull: 2
     - _Cutoff: 0.5
     - _DetailNormalMapScale: 1
     - _DstBlend: 0
+    - _EmmissiveStrength: 0
+    - _EnableShadowCasting: 0
     - _GlossMapScale: 1
     - _Glossiness: 0.5
     - _GlossyReflections: 1
+    - _InverseSqareMultiplier: 1
+    - _LightCutoffDistance: 100
     - _LightmapIndex: 0
+    - _MaxWalkDepth: 7
     - _Metallic: 0
     - _Mode: 0
+    - _NormalMapStrength: 1
     - _OcclusionStrength: 1
     - _Parallax: 0.02
     - _SmoothnessTextureChannel: 0
@@ -87,6 +107,9 @@ Material:
     - _UVSec: 0
     - _ZWrite: 1
     m_Colors:
+    - _BoundsCenter: {r: 0, g: 0, b: 0, a: 0}
+    - _BoundsSize: {r: 20, g: 20, b: 20, a: 20}
     - _Color: {r: 1, g: 1, b: 1, a: 1}
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
+    - _EmmissiveColor: {r: 1, g: 1, b: 1, a: 1}
   m_BuildTextureStacks: []

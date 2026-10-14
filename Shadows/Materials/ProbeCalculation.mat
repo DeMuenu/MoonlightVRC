@@ -68,7 +68,7 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _ProbePositionsTex:
-        m_Texture: {fileID: 2800000, guid: fa1b6904cbdba986fa0a23fc0f2cc28f, type: 2}
+        m_Texture: {fileID: 2800000, guid: 3f8b4e96f56af3302b8e45030674dfea, type: 2}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     m_Ints: []
@@ -81,7 +81,7 @@ Material:
     - _GlossMapScale: 1
     - _Glossiness: 0.5
     - _GlossyReflections: 1
-    - _MaxWalkDepth: 6
+    - _MaxWalkDepth: 7
     - _Metallic: 0
     - _Mode: 0
     - _OcclusionStrength: 1
@@ -94,8 +94,8 @@ Material:
     - _ZWrite: 1
     m_Colors:
     - _BoundsCenter: {r: 0, g: 0, b: 0, a: 0}
-    - _BoundsSize: {r: 10, g: 10, b: 10, a: 0}
-    - _CameraRenderTextureSize: {r: 1920, g: 1080, b: 0, a: 0}
+    - _BoundsSize: {r: 20, g: 20, b: 20, a: 0}
+    - _CameraRenderTextureSize: {r: 256, g: 256, b: 0, a: 0}
     - _Color: {r: 1, g: 1, b: 1, a: 1}
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
   m_BuildTextureStacks: []
