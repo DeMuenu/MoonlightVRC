@@ -32,7 +32,6 @@ public class ProbeBaker : MonoBehaviour
             if (i < childCount)
             {
                 Transform child = settings.probeRootTransform.GetChild(i);
-                // FIX: Use world position so it matches shader world positions (i.worldPos)
                 Vector3 pos = child.position; 
                 colors[i] = new Color(pos.x, pos.y, pos.z, 1.0f);
             }
@@ -66,7 +65,6 @@ public class ProbeBaker : MonoBehaviour
         Vector3[] probePositions = new Vector3[childCount];
         for (int i = 0; i < childCount; i++)
         {
-            // FIX: Use world position here as well
             probePositions[i] = settings.probeRootTransform.GetChild(i).position;
         }
 
@@ -114,19 +112,24 @@ public class ProbeBaker : MonoBehaviour
 
                 Mesh mesh = mf.sharedMesh;
                 Vector3[] vertices = mesh.vertices;
+                Vector3[] normals = mesh.normals;
                 Vector2[] uv2 = mesh.uv2;
                 if (uv2 == null || uv2.Length == 0) uv2 = mesh.uv;
                 int[] tris = mesh.triangles;
 
                 Matrix4x4 localToWorld = renderer.localToWorldMatrix;
+                Matrix4x4 normalMatrix = localToWorld.inverse.transpose;
                 Vector4 scaleOffset = renderer.lightmapScaleOffset;
 
                 Vector3[] worldVerts = new Vector3[vertices.Length];
+                Vector3[] worldNormals = new Vector3[vertices.Length];
                 Vector2[] uvPixels = new Vector2[vertices.Length];
 
                 for (int v = 0; v < vertices.Length; v++)
                 {
                     worldVerts[v] = localToWorld.MultiplyPoint(vertices[v]);
+                    worldNormals[v] = (normals != null && normals.Length > v) ? normalMatrix.MultiplyVector(normals[v]).normalized : Vector3.up;
+
                     Vector2 lightmapUV = new Vector2(
                         uv2[v].x * scaleOffset.x + scaleOffset.z,
                         uv2[v].y * scaleOffset.y + scaleOffset.w
@@ -157,7 +160,9 @@ public class ProbeBaker : MonoBehaviour
                             if (GetBarycentric(pixelCenter, p0, p1, p2, out float w0, out float w1, out float w2))
                             {
                                 Vector3 worldPos = worldVerts[i0] * w0 + worldVerts[i1] * w1 + worldVerts[i2] * w2;
-                                int[] closest = Get3ClosestProbes(worldPos, probePositions);
+                                Vector3 worldNormal = (worldNormals[i0] * w0 + worldNormals[i1] * w1 + worldNormals[i2] * w2).normalized;
+
+                                int[] closest = Get3ClosestProbes(worldPos, worldNormal, probePositions);
 
                                 Color c = new Color(
                                     (float)closest[0] / 65535.0f,
@@ -204,7 +209,83 @@ public class ProbeBaker : MonoBehaviour
         return w0 >= 0f && w1 >= 0f && w2 >= 0f;
     }
 
-    private int[] Get3ClosestProbes(Vector3 pos, Vector3[] probePositions)
+    private int[] Get3ClosestProbes(Vector3 pos, Vector3 normal, Vector3[] probePositions)
+    {
+        List<int> validProbes = new List<int>();
+        List<float> validDistances = new List<float>();
+
+        for (int i = 0; i < probePositions.Length; i++)
+        {
+            Vector3 dirToProbe = probePositions[i] - pos;
+            float dist = dirToProbe.magnitude;
+
+            if (dist < 0.0001f)
+            {
+                validProbes.Add(i);
+                validDistances.Add(dist);
+                continue;
+            }
+
+            Vector3 dirNormalized = dirToProbe / dist;
+
+            // 1. Directional check: Dot product > 0 (probe is in the direction of the normal)
+            if (Vector3.Dot(dirNormalized, normal) <= 0f) continue;
+
+            // 2. Raycast visibility check: ensure no geometry blocks the line of sight
+            Ray ray = new Ray(pos + normal * 0.001f, dirNormalized);
+            if (Physics.Raycast(ray, out RaycastHit hit, dist - 0.002f, ~0, QueryTriggerInteraction.Ignore))
+            {
+                // Occluded by geometry
+                continue;
+            }
+
+            validProbes.Add(i);
+            validDistances.Add(dist);
+        }
+
+        // Sort valid probes by distance
+        for (int i = 0; i < validProbes.Count - 1; i++)
+        {
+            for (int j = i + 1; j < validProbes.Count; j++)
+            {
+                if (validDistances[j] < validDistances[i])
+                {
+                    float tempD = validDistances[i]; validDistances[i] = validDistances[j]; validDistances[j] = tempD;
+                    int tempP = validProbes[i]; validProbes[i] = validProbes[j]; validProbes[j] = tempP;
+                }
+            }
+        }
+
+        int best1 = 0, best2 = 0, best3 = 0;
+
+        if (validProbes.Count >= 3)
+        {
+            best1 = validProbes[0];
+            best2 = validProbes[1];
+            best3 = validProbes[2];
+        }
+        else if (validProbes.Count == 2)
+        {
+            best1 = validProbes[0];
+            best2 = validProbes[1];
+            best3 = validProbes[1];
+        }
+        else if (validProbes.Count == 1)
+        {
+            best1 = validProbes[0];
+            best2 = validProbes[0];
+            best3 = validProbes[0];
+        }
+        else
+        {
+            // Fallback: If no probes pass the normal/raycast filters, fall back to absolute closest probes
+            return GetClosestProbesAbsoluteFallback(pos, probePositions);
+        }
+
+        return new int[] { best1, best2, best3 };
+    }
+
+    private int[] GetClosestProbesAbsoluteFallback(Vector3 pos, Vector3[] probePositions)
     {
         int best1 = 0, best2 = 0, best3 = 0;
         float dist1 = float.MaxValue, dist2 = float.MaxValue, dist3 = float.MaxValue;
@@ -216,16 +297,16 @@ public class ProbeBaker : MonoBehaviour
             {
                 best3 = best2; dist3 = dist2;
                 best2 = best1; dist2 = dist1;
-                best1 = i;     dist1 = sqrDist;
+                best1 = i;    dist1 = sqrDist;
             }
             else if (sqrDist < dist2)
             {
                 best3 = best2; dist3 = dist2;
-                best2 = i;     dist2 = sqrDist;
+                best2 = i;    dist2 = sqrDist;
             }
             else if (sqrDist < dist3)
             {
-                best3 = i;     dist3 = sqrDist;
+                best3 = i;    dist3 = sqrDist;
             }
         }
         return new int[] { best1, best2, best3 };
@@ -240,7 +321,6 @@ public class ProbeBaker : MonoBehaviour
         int count = 0;
         foreach (var renderer in renderers)
         {
-            // Skip objects that aren't lightmapped
             if (renderer.lightmapIndex < 0) continue;
 
             renderer.GetPropertyBlock(propBlock);
@@ -249,6 +329,6 @@ public class ProbeBaker : MonoBehaviour
             count++;
         }
 
-        Debug.Log("Successfully applied automatic lightmap indices to {count} renderers.");
+        Debug.Log($"Successfully applied automatic lightmap indices to {count} renderers.");
     }
 }
