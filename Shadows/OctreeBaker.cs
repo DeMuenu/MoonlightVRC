@@ -6,7 +6,7 @@ public class OctreeBakerWindow : EditorWindow
 {
     private OctreeSettings settings;
 
-    [MenuItem("Tools/Octree Baker (16-bit)")]
+    [MenuItem("Tools/MoonlightVRC/Octree Baker (16-bit)")]
     public static void ShowWindow()
     {
         GetWindow<OctreeBakerWindow>("Octree Baker 16-bit");
@@ -37,7 +37,6 @@ public class OctreeBakerWindow : EditorWindow
         layerMaskProp.intValue = LayerMaskField("Collider Layer Mask", layerMaskProp.intValue);
 
         EditorGUILayout.Space();
-        EditorGUILayout.PropertyField(serializedSettings.FindProperty("textureName"), true);
         EditorGUILayout.PropertyField(serializedSettings.FindProperty("textureWidth"), true);
         EditorGUILayout.PropertyField(serializedSettings.FindProperty("textureHeight"), true);
 
@@ -143,7 +142,7 @@ public class OctreeBakerWindow : EditorWindow
         tex.SetPixelData(pixelData, 0);
         tex.Apply(false, false);
 
-        string path = $"Assets/MoonlightVRC/Shadows/{settings.textureName}.asset";
+        string path = settings.octreeSavePath;
         Texture2D existingTex = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
         if (existingTex != null)
         {

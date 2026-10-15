@@ -10,7 +10,7 @@ public class OctreeVisualizerWindow : EditorWindow
     private bool showOnlyOccupied = true;
     private bool drawInScene = true;
 
-    [MenuItem("Tools/Octree Visualizer")]
+    [MenuItem("Tools/MoonlightVRC/Octree Visualizer")]
     public static void ShowWindow()
     {
         GetWindow<OctreeVisualizerWindow>("Octree Visualizer");
