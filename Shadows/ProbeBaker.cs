@@ -14,7 +14,6 @@ public class ProbeBaker : MonoBehaviour
 
     public BakeSettings settings;
 
-    [ContextMenu("Bake Probe Positions")]
     public void BakeProbePositions()
     {
         int width = 256;
@@ -52,7 +51,6 @@ public class ProbeBaker : MonoBehaviour
         #endif
     }
 
-    [ContextMenu("Bake Closest Probes Texture Array")]
     public void BakeClosestProbesTexture()
     {
         #if UNITY_EDITOR
@@ -426,7 +424,6 @@ public class ProbeBaker : MonoBehaviour
             SearchProbeTree(farNode, pos, normal, positions, nodes, requireFrontFacing, ref results);
     }
 
-    [ContextMenu("Apply Lightmap Indices Automatically")]
     public void ApplyLightmapIndices()
     {
         MeshRenderer[] renderers = FindObjectsOfType<MeshRenderer>();

@@ -1,58 +1,17 @@
+#if UNITY_EDITOR
 using UnityEngine;
 using UnityEditor;
 using Unity.Collections;
 
-public class OctreeVisualizerWindow : EditorWindow
+[System.Serializable]
+public class OctreeVisualizer
 {
-    private OctreeSettings settings;
-    private Texture2D bakedTexture;
-    private int displayDepth = 4;
-    private bool showOnlyOccupied = true;
-    private bool drawInScene = true;
+    public Texture2D bakedTexture;
+    public int displayDepth = 4;
+    public bool showOnlyOccupied = true;
+    public bool drawInScene = true;
 
-    [MenuItem("Tools/MoonlightVRC/Octree Visualizer")]
-    public static void ShowWindow()
-    {
-        GetWindow<OctreeVisualizerWindow>("Octree Visualizer");
-    }
-
-    private void OnEnable()
-    {
-        SceneView.duringSceneGui += OnSceneGUI;
-    }
-
-    private void OnDisable()
-    {
-        SceneView.duringSceneGui -= OnSceneGUI;
-    }
-
-    private void OnGUI()
-    {
-        GUILayout.Label("Octree Texture Visualizer", EditorStyles.boldLabel);
-        EditorGUILayout.Space();
-
-        settings = (OctreeSettings)EditorGUILayout.ObjectField("Octree Settings Object", settings, typeof(OctreeSettings), true);
-        bakedTexture = (Texture2D)EditorGUILayout.ObjectField("Baked Octree Texture", bakedTexture, typeof(Texture2D), false);
-        
-        displayDepth = EditorGUILayout.IntSlider("Display Max Depth", displayDepth, 0, 7);
-        showOnlyOccupied = EditorGUILayout.Toggle("Show Only Occupied", showOnlyOccupied);
-        drawInScene = EditorGUILayout.Toggle("Draw in Scene View", drawInScene);
-
-        EditorGUILayout.Space();
-        if (GUILayout.Button("Repaint Scene"))
-        {
-            SceneView.RepaintAll();
-        }
-
-        EditorGUILayout.HelpBox(
-            "Cyan = Intermediate Node\n" +
-            "Green = Leaf Node\n" +
-            "Settings are pulled directly from the assigned OctreeSettings GameObject.", 
-            MessageType.Info
-        );
-    }
-
-    private void OnSceneGUI(SceneView sceneView)
+    public void DrawScene(OctreeSettings settings)
     {
         if (!drawInScene || bakedTexture == null || settings == null) return;
 
@@ -116,3 +75,4 @@ public class OctreeVisualizerWindow : EditorWindow
         }
     }
 }
+#endif

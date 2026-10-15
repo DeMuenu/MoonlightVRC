@@ -1,70 +1,15 @@
+#if UNITY_EDITOR
 using UnityEngine;
 using UnityEditor;
 using System.Collections.Generic;
 
-public class OctreeBakerWindow : EditorWindow
+public class OctreeBaker
 {
-    private OctreeSettings settings;
+    private readonly OctreeSettings settings;
 
-    [MenuItem("Tools/MoonlightVRC/Octree Baker (16-bit)")]
-    public static void ShowWindow()
+    public OctreeBaker(OctreeSettings settings)
     {
-        GetWindow<OctreeBakerWindow>("Octree Baker 16-bit");
-    }
-
-    private void OnGUI()
-    {
-        GUILayout.Label("Octree to 16-bit Texture Baker (RGBA64)", EditorStyles.boldLabel);
-        EditorGUILayout.Space();
-
-        settings = (OctreeSettings)EditorGUILayout.ObjectField("Octree Settings Object", settings, typeof(OctreeSettings), true);
-
-        if (settings == null)
-        {
-            EditorGUILayout.HelpBox("Please assign an OctreeSettings component from an empty GameObject in the scene.", MessageType.Warning);
-            return;
-        }
-
-        // Draw serialized properties from the component so changes save to the scene object
-        SerializedObject serializedSettings = new SerializedObject(settings);
-        serializedSettings.Update();
-
-        EditorGUILayout.Space();
-        EditorGUILayout.PropertyField(serializedSettings.FindProperty("bounds"), true);
-        EditorGUILayout.PropertyField(serializedSettings.FindProperty("maxDepth"), true);
-        
-        SerializedProperty layerMaskProp = serializedSettings.FindProperty("colliderLayerMask");
-        layerMaskProp.intValue = LayerMaskField("Collider Layer Mask", layerMaskProp.intValue);
-
-        EditorGUILayout.Space();
-        EditorGUILayout.PropertyField(serializedSettings.FindProperty("textureWidth"), true);
-        EditorGUILayout.PropertyField(serializedSettings.FindProperty("textureHeight"), true);
-
-        serializedSettings.ApplyModifiedProperties();
-
-        EditorGUILayout.Space();
-        if (GUILayout.Button("Calculate and Bake Octree Texture"))
-        {
-            BakeOctree();
-        }
-        if (GUILayout.Button("Bake Probe Positions"))
-        {
-            BakeProbePositions();
-        }
-    }
-
-    private int LayerMaskField(string label, int mask)
-    {
-        List<string> layers = new List<string>();
-        for (int i = 0; i < 32; i++)
-        {
-            string layerName = LayerMask.LayerToName(i);
-            if (!string.IsNullOrEmpty(layerName))
-            {
-                layers.Add(layerName);
-            }
-        }
-        return EditorGUILayout.MaskField(label, mask, layers.ToArray());
+        this.settings = settings;
     }
 
     private class OctreeNode
@@ -81,7 +26,7 @@ public class OctreeBakerWindow : EditorWindow
         }
     }
 
-    private void BakeOctree()
+    public void BakeOctree()
     {
         if (settings == null) return;
 
@@ -263,3 +208,4 @@ public class OctreeBakerWindow : EditorWindow
         #endif
     }
 }
+#endif
