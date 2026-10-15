@@ -176,7 +176,7 @@ public class OctreeBaker
         tex.filterMode = FilterMode.Point;
         tex.wrapMode = TextureWrapMode.Clamp;
 
-        int childCount = settings.probeRootTransform.childCount;
+        int childCount = settings.ProbeRoot.childCount;
         Debug.Log($"Baking {childCount} children positions (Max capacity: {maxCapacity}).");
 
         Color[] colors = new Color[maxCapacity];
@@ -185,7 +185,7 @@ public class OctreeBaker
         {
             if (i < childCount)
             {
-                Transform child = settings.probeRootTransform.GetChild(i);
+                Transform child = settings.ProbeRoot.GetChild(i);
                 // Use localPosition (or child.position for world space)
                 Vector3 pos = child.localPosition; 
                 colors[i] = new Color(pos.x, pos.y, pos.z, 1.0f);

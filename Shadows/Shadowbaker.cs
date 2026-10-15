@@ -6,136 +6,187 @@ using System.Collections.Generic;
 [CustomEditor(typeof(OctreeSettings))]
 public class Shadowbaker : Editor
 {
-    [SerializeField] private bool showBaking = true;
-    [SerializeField] private bool showNodes;
-    [SerializeField] private bool showOctreeVisualization;
-    [SerializeField] private bool showProbeDebug;
-    [SerializeField] private UltimateNodePlacer nodePlacer;
-    [SerializeField] private ProbeBaker probeBaker;
-    [SerializeField] private ProbeDebugVisualizer probeDebug;
-    [SerializeField] private OctreeVisualizer octreeVisualizer = new OctreeVisualizer();
+    private readonly OctreeVisualizer octreeVisualizer = new OctreeVisualizer();
     [SerializeField] private int selectedTab = 0;
-    private string[] tabs = { "Editor", "Generator", "Operations", "Display" };
+    [SerializeField] private bool showBakeAdvanced;
+    [SerializeField] private bool showNodeAdvanced;
+    [SerializeField] private bool showPreviewAdvanced;
+    [SerializeField] private bool showShortcuts;
+    private readonly string[] tabs = { "Bake", "Nodes", "Preview" };
 
     private void OnEnable()
     {
         OctreeSettings settings = (OctreeSettings)target;
-        Transform root = settings.probeRootTransform != null ? settings.probeRootTransform : settings.transform;
-        if (nodePlacer == null) nodePlacer = root.GetComponent<UltimateNodePlacer>();
-        if (probeBaker == null) probeBaker = settings.GetComponent<ProbeBaker>();
-        if (probeDebug == null) probeDebug = settings.GetComponent<ProbeDebugVisualizer>();
+        MigrateSettings(settings);
     }
 
     public override void OnInspectorGUI()
     {
-        DrawDefaultInspector();
         OctreeSettings settings = (OctreeSettings)target;
-
-        EditorGUILayout.Space();
+        serializedObject.Update();
         EditorGUILayout.LabelField("Shadow Baker", EditorStyles.boldLabel);
+        DrawProperty("probeRootTransform", "Probe Root");
+        EditorGUILayout.LabelField($"{settings.ProbeRoot.childCount} probes", EditorStyles.miniLabel);
+        selectedTab = GUILayout.Toolbar(selectedTab, tabs);
+        EditorGUILayout.Space();
         EditorGUI.BeginChangeCheck();
-        showBaking = EditorGUILayout.Foldout(showBaking, "Baking & Lightmap Operations", true);
-        if (showBaking) DrawBaking(settings);
-
-        showNodes = EditorGUILayout.Foldout(showNodes, "Node Placement & Editing", true);
-        if (showNodes) DrawNodes(settings);
-
-        showOctreeVisualization = EditorGUILayout.Foldout(showOctreeVisualization, "Octree Visualization", true);
-        if (showOctreeVisualization) DrawOctreeVisualization();
-
-        showProbeDebug = EditorGUILayout.Foldout(showProbeDebug, "Probe Debug Visualization", true);
-        if (showProbeDebug) DrawProbeDebug(settings);
+        switch (selectedTab)
+        {
+            case 0: DrawBaking(settings); break;
+            case 1: DrawNodes(settings); break;
+            case 2: DrawPreview(settings); break;
+        }
+        serializedObject.ApplyModifiedProperties();
         if (EditorGUI.EndChangeCheck()) SceneView.RepaintAll();
     }
 
     private void DrawBaking(OctreeSettings settings)
     {
-        OctreeBaker baker = new OctreeBaker(settings);
-        if (GUILayout.Button("Calculate and Bake Octree Texture")) baker.BakeOctree();
-        if (GUILayout.Button("Bake Probe Positions (Local Space)")) baker.BakeProbePositions();
-
+        DrawProperty("bounds", "Bake Bounds");
+        DrawProperty("maxDepth", "Octree Detail");
+        DrawProperty("colliderLayerMask", "Geometry Layers");
         EditorGUILayout.Space();
-        probeBaker = (ProbeBaker)EditorGUILayout.ObjectField("Probe Baker", probeBaker, typeof(ProbeBaker), true);
-        if (probeBaker == null)
+        if (GUILayout.Button("Bake Shadows", GUILayout.Height(32)))
         {
-            if (GUILayout.Button("Add Probe Baker")) probeBaker = Undo.AddComponent<ProbeBaker>(settings.gameObject);
-            return;
+            serializedObject.ApplyModifiedProperties();
+            new OctreeBaker(settings).BakeOctree();
+            ProbeBaker.BakeProbePositions(settings);
+            ProbeBaker.BakeClosestProbesTexture(settings);
+            ProbeBaker.ApplyLightmapIndicesAutomatically();
         }
-
-        DrawComponentProperties(probeBaker);
-        if (GUILayout.Button("Bake Probe Positions (World Space)")) probeBaker.BakeProbePositions();
-        if (GUILayout.Button("Bake Closest Probes Texture Array")) probeBaker.BakeClosestProbesTexture();
-        if (GUILayout.Button("Apply Lightmap Indices Automatically")) probeBaker.ApplyLightmapIndices();
+        EditorGUILayout.LabelField("Uses existing Unity lightmaps and world-space probe positions.", EditorStyles.wordWrappedMiniLabel);
+        showBakeAdvanced = EditorGUILayout.Foldout(showBakeAdvanced, "Advanced", true);
+        if (!showBakeAdvanced) return;
+        DrawProperty("textureWidth", "Octree Texture Width");
+        DrawProperty("textureHeight", "Octree Texture Height");
+        DrawProperty("octreeSavePath", "Octree Output");
+        DrawProperty("worldProbePositionSavePath", "Probe Positions Output");
+        DrawProperty("probeIndexTextureArraySavePath", "Probe Indices Output");
+        EditorGUILayout.Space();
+        serializedObject.ApplyModifiedProperties();
+        if (GUILayout.Button("Bake Octree Only")) new OctreeBaker(settings).BakeOctree();
+        if (GUILayout.Button("Bake World Probe Positions Only")) ProbeBaker.BakeProbePositions(settings);
+        if (GUILayout.Button("Bake Closest Probe Indices Only")) ProbeBaker.BakeClosestProbesTexture(settings);
+        if (GUILayout.Button("Apply Lightmap Indices")) ProbeBaker.ApplyLightmapIndicesAutomatically();
+        DrawProperty("probePositionSavePath", "Local Positions Output");
+        if (GUILayout.Button("Bake Local Probe Positions"))
+        {
+            serializedObject.ApplyModifiedProperties();
+            new OctreeBaker(settings).BakeProbePositions();
+        }
     }
 
     private void DrawNodes(OctreeSettings settings)
     {
-        nodePlacer = (UltimateNodePlacer)EditorGUILayout.ObjectField("Node Placer", nodePlacer, typeof(UltimateNodePlacer), true);
-        if (nodePlacer == null)
+        DrawProperty("editNodes", "Edit Probes in Scene");
+        DrawProperty("generatorSize", "Grid Size");
+        DrawProperty("generatorCount", "Grid Counts");
+        serializedObject.ApplyModifiedProperties();
+        if (GUILayout.Button("Generate Probe Grid", GUILayout.Height(30)))
         {
-            if (GUILayout.Button("Add Node Placer to Probe Root"))
-            {
-                Transform root = settings.probeRootTransform != null ? settings.probeRootTransform : settings.transform;
-                nodePlacer = Undo.AddComponent<UltimateNodePlacer>(root.gameObject);
-            }
-            return;
+            if (settings.ProbeRoot.childCount == 0 || EditorUtility.DisplayDialog("Generate Grid", "This will replace all existing child nodes. Are you sure?", "Yes", "Cancel"))
+                GenerateGrid(settings);
         }
-
-        UltimateNodePlacer placer = nodePlacer;
-        Undo.RecordObject(placer, "Edit Node Placer Settings");
-        EditorGUI.BeginChangeCheck();
-        selectedTab = GUILayout.Toolbar(selectedTab, tabs);
-        GUILayout.Space(10);
-        switch (selectedTab)
+        EditorGUILayout.BeginHorizontal();
+        if (GUILayout.Button("Add Probe")) SpawnNode(settings, settings.ProbeRoot.position);
+        using (new EditorGUI.DisabledScope(settings.selectedIndices.Count == 0))
         {
-            case 0: DrawEditorTab(placer); break;
-            case 1: DrawGeneratorTab(placer); break;
-            case 2: DrawOperationsTab(placer); break;
-            case 3: DrawDisplayTab(placer); break;
+            if (GUILayout.Button("Duplicate")) DuplicateSelectedNodes(settings);
         }
-        if (EditorGUI.EndChangeCheck()) EditorUtility.SetDirty(placer);
+        EditorGUILayout.EndHorizontal();
+        showNodeAdvanced = EditorGUILayout.Foldout(showNodeAdvanced, "Advanced", true);
+        if (!showNodeAdvanced) return;
+        DrawProperty("nodePrefab", "Probe Prefab");
+        serializedObject.ApplyModifiedProperties();
+        if (GUILayout.Button("Append Grid")) AppendGrid(settings);
+        DrawOperationsTab(settings);
+        DrawDisplayTab(settings);
+        showShortcuts = EditorGUILayout.Foldout(showShortcuts, "Scene Shortcuts", true);
+        if (showShortcuts) DrawEditorTab(settings);
     }
 
-    private void DrawOctreeVisualization()
+    private void DrawPreview(OctreeSettings settings)
     {
-        octreeVisualizer.bakedTexture = (Texture2D)EditorGUILayout.ObjectField("Baked Octree Texture", octreeVisualizer.bakedTexture, typeof(Texture2D), false);
-        octreeVisualizer.displayDepth = EditorGUILayout.IntSlider("Display Max Depth", octreeVisualizer.displayDepth, 0, 7);
-        octreeVisualizer.showOnlyOccupied = EditorGUILayout.Toggle("Show Only Occupied", octreeVisualizer.showOnlyOccupied);
-        octreeVisualizer.drawInScene = EditorGUILayout.Toggle("Draw in Scene View", octreeVisualizer.drawInScene);
-        if (GUILayout.Button("Repaint Scene")) SceneView.RepaintAll();
-        EditorGUILayout.HelpBox(
-            "Cyan = Intermediate Node\n" +
-            "Green = Leaf Node\n" +
-            "Settings are pulled directly from this OctreeSettings GameObject.", MessageType.Info);
-    }
-
-    private void DrawProbeDebug(OctreeSettings settings)
-    {
-        probeDebug = (ProbeDebugVisualizer)EditorGUILayout.ObjectField("Probe Debug Visualizer", probeDebug, typeof(ProbeDebugVisualizer), true);
-        if (probeDebug == null)
+        DrawProperty("octreePreview.enabled", "Show Octree");
+        if (serializedObject.FindProperty("octreePreview.enabled").boolValue)
         {
-            if (GUILayout.Button("Add Probe Debug Visualizer")) probeDebug = Undo.AddComponent<ProbeDebugVisualizer>(settings.gameObject);
-            return;
+            UseBakedTexture("octreePreview.bakedTexture", settings.octreeSavePath);
         }
-        DrawComponentProperties(probeDebug);
+        DrawProperty("probePreview.enabled", "Show Probe Shadows");
+        if (serializedObject.FindProperty("probePreview.enabled").boolValue)
+        {
+            DrawProperty("probePreview.shadowCalculationTexture", "Shadow Texture");
+            UseBakedTexture("probePreview.probePosTexture", settings.worldProbePositionSavePath);
+            DrawProperty("probePreview.targetLightIndex", "Light Index");
+        }
+        showPreviewAdvanced = EditorGUILayout.Foldout(showPreviewAdvanced, "Advanced", true);
+        if (!showPreviewAdvanced) return;
+        DrawProperty("octreePreview.bakedTexture", "Octree Texture");
+        DrawProperty("octreePreview.displayDepth", "Display Depth");
+        DrawProperty("octreePreview.showOnlyOccupied", "Occupied Nodes Only");
+        DrawProperty("probePreview.probePosTexture", "Probe Positions Texture");
+        DrawProperty("probePreview.probeCount", "Probe Count");
+        DrawProperty("probePreview.gizmoRadius", "Probe Radius");
     }
 
-    private static void DrawComponentProperties(MonoBehaviour component)
+    private void UseBakedTexture(string propertyName, string path)
     {
-        SerializedObject componentObject = new SerializedObject(component);
-        componentObject.Update();
-        DrawPropertiesExcluding(componentObject, "m_Script");
-        componentObject.ApplyModifiedProperties();
+        SerializedProperty property = serializedObject.FindProperty(propertyName);
+        if (property.objectReferenceValue == null)
+            property.objectReferenceValue = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
     }
 
-    private void DrawEditorTab(UltimateNodePlacer placer)
+    private void DrawProperty(string name, string label)
     {
-        SerializedObject placerObject = new SerializedObject(placer);
-        placerObject.Update();
-        EditorGUILayout.PropertyField(placerObject.FindProperty("nodePrefab"));
-        placerObject.ApplyModifiedProperties();
+        EditorGUILayout.PropertyField(serializedObject.FindProperty(name), new GUIContent(label), true);
+    }
 
-        EditorGUILayout.Space();
+    private static void MigrateSettings(OctreeSettings settings)
+    {
+        if (settings.settingsConsolidated) return;
+        Undo.RecordObject(settings, "Consolidate Shadow Settings");
+        ProbeBaker baker = settings.GetComponent<ProbeBaker>();
+        if (baker == null) baker = settings.ProbeRoot.GetComponent<ProbeBaker>();
+        if (baker != null && baker.settings != null)
+        {
+            if (settings.probeRootTransform == null) settings.probeRootTransform = baker.settings.probeRootTransform;
+            settings.worldProbePositionSavePath = baker.settings.probePositionSavePath;
+            settings.probeIndexTextureArraySavePath = baker.settings.probeIndexTextureArraySavePath;
+            Undo.RecordObject(baker, "Consolidate Shadow Settings");
+            baker.settingsOwner = settings;
+            EditorUtility.SetDirty(baker);
+            PrefabUtility.RecordPrefabInstancePropertyModifications(baker);
+        }
+        UltimateNodePlacer placer = settings.ProbeRoot.GetComponent<UltimateNodePlacer>();
+        if (placer != null)
+        {
+            settings.nodePrefab = placer.nodePrefab;
+            settings.generatorSize = placer.generatorSize;
+            settings.generatorCount = placer.generatorCount;
+            settings.handleSize = placer.handleSize;
+            settings.showConnections = placer.showConnections;
+            settings.connectionDistance = placer.connectionDistance;
+            settings.showLabels = placer.showLabels;
+            settings.textureSavePath = placer.textureSavePath;
+            settings.selectedIndices = new List<int>(placer.selectedIndices);
+        }
+        ProbeDebugVisualizer debug = settings.GetComponent<ProbeDebugVisualizer>();
+        if (debug == null) debug = settings.ProbeRoot.GetComponent<ProbeDebugVisualizer>();
+        if (debug != null)
+        {
+            settings.probePreview = debug.GetLegacySettings();
+            Undo.RecordObject(debug, "Consolidate Shadow Settings");
+            debug.settingsOwner = settings;
+            EditorUtility.SetDirty(debug);
+            PrefabUtility.RecordPrefabInstancePropertyModifications(debug);
+        }
+        settings.settingsConsolidated = true;
+        EditorUtility.SetDirty(settings);
+        PrefabUtility.RecordPrefabInstancePropertyModifications(settings);
+    }
+
+    private void DrawEditorTab(OctreeSettings placer)
+    {
         EditorGUILayout.HelpBox(
             "Interactive Scene Controls:\n" +
             "- Click node to select.\n" +
@@ -147,17 +198,6 @@ public class Shadowbaker : Editor
             MessageType.Info
         );
 
-        EditorGUILayout.BeginHorizontal();
-        if (GUILayout.Button("Add Node at Center", GUILayout.Height(30)))
-        {
-            SpawnNode(placer, placer.transform.position);
-        }
-        if (GUILayout.Button("Duplicate Selected", GUILayout.Height(30)))
-        {
-            DuplicateSelectedNodes(placer);
-        }
-        EditorGUILayout.EndHorizontal();
-
         if (placer.selectedIndices.Count > 0)
         {
             if (GUILayout.Button($"Clear Selection ({placer.selectedIndices.Count} selected)", GUILayout.Height(25)))
@@ -168,27 +208,7 @@ public class Shadowbaker : Editor
         }
     }
 
-    private void DrawGeneratorTab(UltimateNodePlacer placer)
-    {
-        EditorGUILayout.LabelField("Procedural Grid Generator", EditorStyles.boldLabel);
-        placer.generatorSize = EditorGUILayout.Vector3Field("Grid Size (Bounds)", placer.generatorSize);
-        placer.generatorCount = EditorGUILayout.Vector3IntField("Node Counts (X, Y, Z)", placer.generatorCount);
-
-        EditorGUILayout.Space();
-        if (GUILayout.Button("Generate Grid (Replace Existing)", GUILayout.Height(35)))
-        {
-            if (EditorUtility.DisplayDialog("Generate Grid", "This will replace all existing child nodes. Are you sure?", "Yes", "Cancel"))
-            {
-                GenerateGrid(placer);
-            }
-        }
-        if (GUILayout.Button("Append Grid to Existing", GUILayout.Height(30)))
-        {
-            AppendGrid(placer);
-        }
-    }
-
-    private void DrawOperationsTab(UltimateNodePlacer placer)
+    private void DrawOperationsTab(OctreeSettings placer)
     {
         EditorGUILayout.LabelField("Batch Operations", EditorStyles.boldLabel);
 
@@ -212,34 +232,36 @@ public class Shadowbaker : Editor
 
         EditorGUILayout.Space();
         EditorGUILayout.LabelField("Texture Baking (Position Texture)", EditorStyles.boldLabel);
-        placer.textureSavePath = EditorGUILayout.TextField("Save Path", placer.textureSavePath);
+        DrawProperty("textureSavePath", "Node Positions Output");
         if (GUILayout.Button("Bake Positions to 256x256 Texture", GUILayout.Height(35)))
         {
+            serializedObject.ApplyModifiedProperties();
             BakePositionsToTexture(placer);
         }
     }
 
-    private void DrawDisplayTab(UltimateNodePlacer placer)
+    private void DrawDisplayTab(OctreeSettings placer)
     {
         EditorGUILayout.LabelField("Visualization Settings", EditorStyles.boldLabel);
-        placer.handleSize = EditorGUILayout.Slider("Handle Size", placer.handleSize, 0.05f, 2.0f);
-        placer.showConnections = EditorGUILayout.Toggle("Show Neighbor Lines", placer.showConnections);
-        if (placer.showConnections)
+        DrawProperty("handleSize", "Handle Size");
+        DrawProperty("showConnections", "Show Neighbor Lines");
+        if (serializedObject.FindProperty("showConnections").boolValue)
         {
-            placer.connectionDistance = EditorGUILayout.Slider("Connection Distance", placer.connectionDistance, 0.5f, 10.0f);
+            DrawProperty("connectionDistance", "Connection Distance");
         }
-        placer.showLabels = EditorGUILayout.Toggle("Show Node Indices", placer.showLabels);
+        DrawProperty("showLabels", "Show Probe Indices");
     }
 
     private void OnSceneGUI()
     {
-        if (showOctreeVisualization) octreeVisualizer.DrawScene((OctreeSettings)target);
-        if (showNodes && nodePlacer != null) DrawNodeSceneGUI(nodePlacer);
+        OctreeSettings settings = (OctreeSettings)target;
+        octreeVisualizer.DrawScene(settings);
+        if (settings.editNodes) DrawNodeSceneGUI(settings);
     }
 
-    private void DrawNodeSceneGUI(UltimateNodePlacer placer)
+    private void DrawNodeSceneGUI(OctreeSettings placer)
     {
-        Transform parentTransform = placer.transform;
+        Transform parentTransform = placer.ProbeRoot;
         int childCount = parentTransform.childCount;
 
         placer.selectedIndices.RemoveAll(index => index >= childCount);
@@ -411,9 +433,9 @@ public class Shadowbaker : Editor
         );
     }
 
-    private void PerformBoxSelection(UltimateNodePlacer placer)
+    private void PerformBoxSelection(OctreeSettings placer)
     {
-        Transform parentTransform = placer.transform;
+        Transform parentTransform = placer.ProbeRoot;
         Rect screenRect = RectMinMax(placer.boxStartMousePos, placer.boxCurrentMousePos);
 
         if (!Event.current.shift)
@@ -436,31 +458,31 @@ public class Shadowbaker : Editor
         EditorUtility.SetDirty(placer);
     }
 
-    private void SpawnNode(UltimateNodePlacer placer, Vector3 worldPosition)
+    private void SpawnNode(OctreeSettings placer, Vector3 worldPosition)
     {
-        Undo.RecordObject(placer.transform, "Add Node");
+        Undo.RecordObject(placer.ProbeRoot, "Add Node");
         
         GameObject newChild;
         if (placer.nodePrefab != null)
         {
-            newChild = (GameObject)PrefabUtility.InstantiatePrefab(placer.nodePrefab, placer.transform);
+            newChild = (GameObject)PrefabUtility.InstantiatePrefab(placer.nodePrefab, placer.ProbeRoot);
             newChild.transform.position = worldPosition;
         }
         else
         {
-            newChild = new GameObject("Node_" + placer.transform.childCount);
-            newChild.transform.SetParent(placer.transform, true);
+            newChild = new GameObject("Node_" + placer.ProbeRoot.childCount);
+            newChild.transform.SetParent(placer.ProbeRoot, true);
             newChild.transform.position = worldPosition;
         }
 
         placer.selectedIndices.Clear();
-        placer.selectedIndices.Add(placer.transform.childCount - 1);
+        placer.selectedIndices.Add(placer.ProbeRoot.childCount - 1);
         EditorUtility.SetDirty(placer.gameObject);
     }
 
-    private void DuplicateSelectedNodes(UltimateNodePlacer placer)
+    private void DuplicateSelectedNodes(OctreeSettings placer)
     {
-        Transform parentTransform = placer.transform;
+        Transform parentTransform = placer.ProbeRoot;
         if (placer.selectedIndices.Count == 0) return;
 
         Undo.RegisterCompleteObjectUndo(parentTransform, "Duplicate Selected Nodes");
@@ -487,9 +509,9 @@ public class Shadowbaker : Editor
         EditorUtility.SetDirty(placer.gameObject);
     }
 
-    private void DeleteSelectedNodes(UltimateNodePlacer placer)
+    private void DeleteSelectedNodes(OctreeSettings placer)
     {
-        Transform parentTransform = placer.transform;
+        Transform parentTransform = placer.ProbeRoot;
         if (placer.selectedIndices.Count == 0) return;
 
         placer.selectedIndices.Sort((a, b) => b.CompareTo(a));
@@ -506,9 +528,9 @@ public class Shadowbaker : Editor
         EditorUtility.SetDirty(placer.gameObject);
     }
 
-    private void GenerateGrid(UltimateNodePlacer placer)
+    private void GenerateGrid(OctreeSettings placer)
     {
-        Transform t = placer.transform;
+        Transform t = placer.ProbeRoot;
         Undo.RegisterFullObjectHierarchyUndo(t.gameObject, "Generate Grid");
 
         while (t.childCount > 0)
@@ -519,9 +541,9 @@ public class Shadowbaker : Editor
         AppendGrid(placer);
     }
 
-    private void AppendGrid(UltimateNodePlacer placer)
+    private void AppendGrid(OctreeSettings placer)
     {
-        Transform t = placer.transform;
+        Transform t = placer.ProbeRoot;
         Undo.RecordObject(t.gameObject, "Append Grid");
 
         Vector3 startPos = t.position - placer.generatorSize * 0.5f;
@@ -552,9 +574,9 @@ public class Shadowbaker : Editor
         EditorUtility.SetDirty(t.gameObject);
     }
 
-    private void CenterNodes(UltimateNodePlacer placer)
+    private void CenterNodes(OctreeSettings placer)
     {
-        Transform t = placer.transform;
+        Transform t = placer.ProbeRoot;
         Undo.RegisterCompleteObjectUndo(t, "Center Nodes");
         foreach (Transform child in t)
         {
@@ -562,9 +584,9 @@ public class Shadowbaker : Editor
         }
     }
 
-    private void JitterSelected(UltimateNodePlacer placer, float amount)
+    private void JitterSelected(OctreeSettings placer, float amount)
     {
-        Transform t = placer.transform;
+        Transform t = placer.ProbeRoot;
         foreach (int i in placer.selectedIndices)
         {
             Transform child = t.GetChild(i);
@@ -573,9 +595,9 @@ public class Shadowbaker : Editor
         }
     }
 
-    private void MirrorNodes(UltimateNodePlacer placer, Vector3 axis)
+    private void MirrorNodes(OctreeSettings placer, Vector3 axis)
     {
-        Transform t = placer.transform;
+        Transform t = placer.ProbeRoot;
         Vector3 parentPos = t.position;
         foreach (int i in placer.selectedIndices)
         {
@@ -587,9 +609,9 @@ public class Shadowbaker : Editor
         }
     }
 
-    private void BakePositionsToTexture(UltimateNodePlacer placer)
+    private void BakePositionsToTexture(OctreeSettings placer)
     {
-        Transform t = placer.transform;
+        Transform t = placer.ProbeRoot;
         int width = 256;
         int height = 256;
         int maxCapacity = width * height;

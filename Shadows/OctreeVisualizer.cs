@@ -6,14 +6,11 @@ using Unity.Collections;
 [System.Serializable]
 public class OctreeVisualizer
 {
-    public Texture2D bakedTexture;
-    public int displayDepth = 4;
-    public bool showOnlyOccupied = true;
-    public bool drawInScene = true;
-
     public void DrawScene(OctreeSettings settings)
     {
-        if (!drawInScene || bakedTexture == null || settings == null) return;
+        if (settings == null || !settings.octreePreview.enabled) return;
+        Texture2D bakedTexture = settings.octreePreview.bakedTexture;
+        if (bakedTexture == null) return;
 
         if (bakedTexture.format != TextureFormat.RGBA64)
         {
@@ -25,7 +22,7 @@ public class OctreeVisualizer
             NativeArray<ushort> pixelData = bakedTexture.GetPixelData<ushort>(0);
             if (!pixelData.IsCreated || pixelData.Length == 0) return;
 
-            DrawOctreeRecursive(0, settings.bounds, 0, displayDepth, pixelData, showOnlyOccupied);
+            DrawOctreeRecursive(0, settings.bounds, 0, settings.octreePreview.displayDepth, pixelData, settings.octreePreview.showOnlyOccupied);
         }
         catch (System.Exception e)
         {

@@ -20,13 +20,14 @@ Shader "DeMuenu/MoonlightVRC/backend/shadowCalculator"
         LOD 100
         ZWrite Off 
         ZTest Always
-        Cull Back // Prevents the quad from disappearing when viewed from certain angles
+        Cull Off // Prevents the quad from disappearing when viewed from certain angles
 
         Pass
         {
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma target 4.5
             #include "UnityCG.cginc"
 
             struct appdata
@@ -59,6 +60,7 @@ Shader "DeMuenu/MoonlightVRC/backend/shadowCalculator"
 
             #define MAX_LIGHTS 80 
             float4 _Udon_LightPositions[MAX_LIGHTS];
+            float _Udon_PlayerCount;
             int _ProbeCount;
             
 
@@ -82,30 +84,48 @@ Shader "DeMuenu/MoonlightVRC/backend/shadowCalculator"
 
             fixed4 frag (v2f i) : SV_Target
             {
-                float2 cameraRenderTextureSize = max(_CameraRenderTextureSize.xy, float2(1.0, 1.0));
-                int2 cameraPixelSize = int2(cameraRenderTextureSize);
-                
-                int2 pixelCoord = clamp(int2(i.uv * cameraRenderTextureSize), int2(0, 0), cameraPixelSize - 1);
+                float2 uv = i.uv;
+                // Fix vertical flipping on platforms where projection or render texture coordinates are inverted
+                #if UNITY_UV_STARTS_AT_TOP
+                if (_ProjectionParams.x < 0)
+                {
+                    uv.y = 1.0 - uv.y;
+                }
+                #endif
 
+                float2 cameraRenderTextureSize = max(_CameraRenderTextureSize.xy, float2(1.0, 1.0));
+                int2 cameraPixelSize = int2(cameraRenderTextureSize);                
+                int2 pixelCoord = clamp(int2(uv * cameraRenderTextureSize), int2(0, 0), cameraPixelSize - 1);
+                
                 uint2 unsignedPixelCoord = (uint2)pixelCoord;
                 uint pixelWidth = (uint)cameraPixelSize.x;
                 uint baseIndex = (unsignedPixelCoord.y * pixelWidth + unsignedPixelCoord.x) * 4u;
                 uint probeCount = (uint)max(_ProbeCount, 1);
 
-
-                float3 hitPos;
                 uint sampleIndex1 = baseIndex;
                 uint sampleIndex2 = baseIndex + 1u;
                 uint sampleIndex3 = baseIndex + 2u;
                 uint sampleIndex4 = baseIndex + 3u;
-                float channel1 = (float)CheckLineInterrupted(_Udon_LightPositions[sampleIndex1 / probeCount].xyz, GetProbePosition(sampleIndex1 % probeCount), 32, hitPos);
-                float channel2 = (float)CheckLineInterrupted(_Udon_LightPositions[sampleIndex2 / probeCount].xyz, GetProbePosition(sampleIndex2 % probeCount), 32, hitPos);
-                float channel3 = (float)CheckLineInterrupted(_Udon_LightPositions[sampleIndex3 / probeCount].xyz, GetProbePosition(sampleIndex3 % probeCount), 32, hitPos);
-                float channel4 = (float)CheckLineInterrupted(_Udon_LightPositions[sampleIndex4 / probeCount].xyz, GetProbePosition(sampleIndex4 % probeCount), 32, hitPos);
 
-                fixed4 finalCol = fixed4(channel1, channel2, channel3, channel4);
+                // Calculate light indices
+                uint lightIndex1 = sampleIndex1 / probeCount;
+                uint lightIndex2 = sampleIndex2 / probeCount;
+                uint lightIndex3 = sampleIndex3 / probeCount;
+                uint lightIndex4 = sampleIndex4 / probeCount;
 
-                return finalCol;
+                // Return black if any light index exceeds the maximum allowed lights
+                if (lightIndex1 >= MAX_LIGHTS || lightIndex2 >= MAX_LIGHTS || lightIndex3 >= MAX_LIGHTS || lightIndex4 >= MAX_LIGHTS)
+                {
+                    return fixed4(0.0, 0.0, 0.0, 1.0);
+                }
+
+                float3 hitPos;
+                float channel1 = (float)CheckLineInterrupted(_Udon_LightPositions[lightIndex1].xyz, GetProbePosition(sampleIndex1 % probeCount), 32, hitPos);
+                float channel2 = (float)CheckLineInterrupted(_Udon_LightPositions[lightIndex2].xyz, GetProbePosition(sampleIndex2 % probeCount), 32, hitPos);
+                float channel3 = (float)CheckLineInterrupted(_Udon_LightPositions[lightIndex3].xyz, GetProbePosition(sampleIndex3 % probeCount), 32, hitPos);
+                float channel4 = (float)CheckLineInterrupted(_Udon_LightPositions[lightIndex4].xyz, GetProbePosition(sampleIndex4 % probeCount), 32, hitPos);
+
+                return fixed4(channel1, channel2, channel3, channel4);
             }
             ENDCG
         }

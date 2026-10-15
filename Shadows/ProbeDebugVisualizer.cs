@@ -3,39 +3,60 @@ using UnityEngine;
 [ExecuteAlways]
 public class ProbeDebugVisualizer : MonoBehaviour
 {
-    [Header("Textures & Data")]
+    // Legacy serialized values are kept for migration into OctreeSettings.
+    [HideInInspector] public OctreeSettings settingsOwner;
+    [HideInInspector]
     [Tooltip("The render texture output from your shadow calculator shader.")]
     public RenderTexture shadowCalculationTexture;
     
     [Tooltip("The 2D texture storing probe world positions (must have Read/Write enabled in import settings).")]
-    public Texture2D probePosTexture;
+    [HideInInspector] public Texture2D probePosTexture;
 
-    [Header("Debug Settings")]
-    public int probeCount = 200;
-    public int targetLightIndex = 0;
-    public float gizmoRadius = 0.25f;
+    [HideInInspector] public int probeCount = 200;
+    [HideInInspector] public int targetLightIndex = 0;
+    [HideInInspector] public float gizmoRadius = 0.25f;
     [Tooltip("Update gizmos continuously in the Scene view.")]
-    public bool liveUpdate = true;
+    [HideInInspector] public bool liveUpdate = true;
 
     private Texture2D cachedShadowTex;
 
     private void OnDrawGizmos()
     {
-        if (probePosTexture == null || shadowCalculationTexture == null)
+        if (settingsOwner != null) return;
+        DrawGizmos(GetLegacySettings(), ref cachedShadowTex);
+    }
+
+    public OctreeSettings.ProbePreviewSettings GetLegacySettings()
+    {
+        return new OctreeSettings.ProbePreviewSettings
+        {
+            enabled = true,
+            shadowCalculationTexture = shadowCalculationTexture,
+            probePosTexture = probePosTexture,
+            probeCount = probeCount,
+            targetLightIndex = targetLightIndex,
+            gizmoRadius = gizmoRadius,
+            liveUpdate = liveUpdate
+        };
+    }
+
+    public static void DrawGizmos(OctreeSettings.ProbePreviewSettings settings, ref Texture2D cachedShadowTex)
+    {
+        if (settings.probePosTexture == null || settings.shadowCalculationTexture == null)
             return;
 
-        UpdateCachedShadowTexture();
+        UpdateCachedShadowTexture(settings.shadowCalculationTexture, ref cachedShadowTex);
 
         if (cachedShadowTex == null)
             return;
 
         int shadowTexWidth = cachedShadowTex.width;
 
-        for (int i = 0; i < probeCount; i++)
+        for (int i = 0; i < settings.probeCount; i++)
         {
-            Vector3 probePos = GetProbePositionFromTexture(i);
+            Vector3 probePos = GetProbePositionFromTexture(settings.probePosTexture, i);
 
-            uint sampleIndex = (uint)targetLightIndex * (uint)probeCount + (uint)i;
+            uint sampleIndex = (uint)settings.targetLightIndex * (uint)settings.probeCount + (uint)i;
             uint pixelLinearIndex = sampleIndex / 4u;
             uint channelIndex = sampleIndex % 4u; // 0=R, 1=G, 2=B, 3=A
 
@@ -53,11 +74,11 @@ public class ProbeDebugVisualizer : MonoBehaviour
             // Corrected: 1.0 means interrupted/occluded -> Red. 0.0 means clear -> Green.
             bool isOccluded = shadowVal > 0.5f;
             Gizmos.color = isOccluded ? Color.red : Color.green;
-            Gizmos.DrawSphere(probePos, gizmoRadius);
+            Gizmos.DrawSphere(probePos, settings.gizmoRadius);
         }
     }
 
-    private Vector3 GetProbePositionFromTexture(int index)
+    private static Vector3 GetProbePositionFromTexture(Texture2D probePosTexture, int index)
     {
         int posTexWidth = probePosTexture.width;
         if (posTexWidth <= 0) posTexWidth = 256;
@@ -71,7 +92,7 @@ public class ProbeDebugVisualizer : MonoBehaviour
 
     private void UpdatedCachedShadowTexture() { } // Legacy placeholder
 
-    private void UpdateCachedShadowTexture()
+    private static void UpdateCachedShadowTexture(RenderTexture shadowCalculationTexture, ref Texture2D cachedShadowTex)
     {
         int width = shadowCalculationTexture.width;
         int height = shadowCalculationTexture.height;

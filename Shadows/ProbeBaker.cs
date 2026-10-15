@@ -12,9 +12,32 @@ public class ProbeBaker : MonoBehaviour
         public string probeIndexTextureArraySavePath = "Assets/MoonlightVRC/Shadows/ProbeIndicesTextureArray.asset";
     }
 
-    public BakeSettings settings;
+    // Retained for loading existing scenes; new tools use OctreeSettings directly.
+    [HideInInspector] public BakeSettings settings;
+    [HideInInspector] public OctreeSettings settingsOwner;
+
+    private static BakeSettings GetSettings(OctreeSettings source)
+    {
+        return new BakeSettings
+        {
+            probeRootTransform = source.ProbeRoot,
+            probePositionSavePath = source.worldProbePositionSavePath,
+            probeIndexTextureArraySavePath = source.probeIndexTextureArraySavePath
+        };
+    }
 
     public void BakeProbePositions()
+    {
+        if (settingsOwner != null) BakeProbePositions(settingsOwner);
+        else BakeProbePositions(settings);
+    }
+
+    public static void BakeProbePositions(OctreeSettings source)
+    {
+        BakeProbePositions(GetSettings(source));
+    }
+
+    private static void BakeProbePositions(BakeSettings settings)
     {
         int width = 256;
         int height = 256;
@@ -52,6 +75,17 @@ public class ProbeBaker : MonoBehaviour
     }
 
     public void BakeClosestProbesTexture()
+    {
+        if (settingsOwner != null) BakeClosestProbesTexture(settingsOwner);
+        else BakeClosestProbesTexture(settings);
+    }
+
+    public static void BakeClosestProbesTexture(OctreeSettings source)
+    {
+        BakeClosestProbesTexture(GetSettings(source));
+    }
+
+    private static void BakeClosestProbesTexture(BakeSettings settings)
     {
         #if UNITY_EDITOR
         int childCount = settings.probeRootTransform.childCount;
@@ -234,7 +268,7 @@ public class ProbeBaker : MonoBehaviour
         #endif
     }
 
-    private bool GetBarycentric(Vector2 p, Vector2 a, Vector2 b, Vector2 c, out float w0, out float w1, out float w2)
+    private static bool GetBarycentric(Vector2 p, Vector2 a, Vector2 b, Vector2 c, out float w0, out float w1, out float w2)
     {
         Vector2 v0 = b - a, v1 = c - a, v2 = p - a;
         float d00 = Vector2.Dot(v0, v0);
@@ -313,7 +347,7 @@ public class ProbeBaker : MonoBehaviour
         }
     }
 
-    private int BuildProbeTree(int[] indices, int start, int end, int depth, Vector3[] positions, ProbeNode[] nodes, ref int nextNode)
+    private static int BuildProbeTree(int[] indices, int start, int end, int depth, Vector3[] positions, ProbeNode[] nodes, ref int nextNode)
     {
         if (start > end)
             return -1;
@@ -330,7 +364,7 @@ public class ProbeBaker : MonoBehaviour
         return nodeIndex;
     }
 
-    private void SelectProbeMedian(int[] indices, int start, int end, int target, int axis, Vector3[] positions)
+    private static void SelectProbeMedian(int[] indices, int start, int end, int target, int axis, Vector3[] positions)
     {
         while (start < end)
         {
@@ -364,7 +398,7 @@ public class ProbeBaker : MonoBehaviour
         }
     }
 
-    private int CompareProbeIndices(int indexA, int indexB, int axis, Vector3[] positions)
+    private static int CompareProbeIndices(int indexA, int indexB, int axis, Vector3[] positions)
     {
         float coordinateA = GetCoordinate(positions[indexA], axis);
         float coordinateB = GetCoordinate(positions[indexB], axis);
@@ -372,21 +406,21 @@ public class ProbeBaker : MonoBehaviour
         return comparison != 0 ? comparison : indexA.CompareTo(indexB);
     }
 
-    private float GetCoordinate(Vector3 position, int axis)
+    private static float GetCoordinate(Vector3 position, int axis)
     {
         if (axis == 0) return position.x;
         if (axis == 1) return position.y;
         return position.z;
     }
 
-    private void Swap(int[] values, int indexA, int indexB)
+    private static void Swap(int[] values, int indexA, int indexB)
     {
         int value = values[indexA];
         values[indexA] = values[indexB];
         values[indexB] = value;
     }
 
-    private void Get3ClosestProbes(Vector3 pos, Vector3 normal, Vector3[] probePositions, ProbeNode[] nodes, int root,
+    private static void Get3ClosestProbes(Vector3 pos, Vector3 normal, Vector3[] probePositions, ProbeNode[] nodes, int root,
         out int closest0, out int closest1, out int closest2)
     {
         ProbeSearchResults results = new ProbeSearchResults();
@@ -404,7 +438,7 @@ public class ProbeBaker : MonoBehaviour
         closest2 = results.count > 2 ? results.index2 : closest1;
     }
 
-    private void SearchProbeTree(int nodeIndex, Vector3 pos, Vector3 normal, Vector3[] positions, ProbeNode[] nodes,
+    private static void SearchProbeTree(int nodeIndex, Vector3 pos, Vector3 normal, Vector3[] positions, ProbeNode[] nodes,
         bool requireFrontFacing, ref ProbeSearchResults results)
     {
         if (nodeIndex < 0)
@@ -425,6 +459,11 @@ public class ProbeBaker : MonoBehaviour
     }
 
     public void ApplyLightmapIndices()
+    {
+        ApplyLightmapIndicesAutomatically();
+    }
+
+    public static void ApplyLightmapIndicesAutomatically()
     {
         MeshRenderer[] renderers = FindObjectsOfType<MeshRenderer>();
         MaterialPropertyBlock propBlock = new MaterialPropertyBlock();

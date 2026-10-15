@@ -3,21 +3,19 @@ using System.Collections.Generic;
 
 public class UltimateNodePlacer : MonoBehaviour
 {
-    [Tooltip("Optional prefab to instantiate for each node. If empty, an empty GameObject will be created.")]
+    // Legacy serialized values are kept for migration into OctreeSettings.
+    [HideInInspector]
     public GameObject nodePrefab;
 
-    [Header("Generator Settings")]
-    public Vector3 generatorSize = new Vector3(5f, 5f, 5f);
-    public Vector3Int generatorCount = new Vector3Int(3, 3, 3);
+    [HideInInspector] public Vector3 generatorSize = new Vector3(5f, 5f, 5f);
+    [HideInInspector] public Vector3Int generatorCount = new Vector3Int(3, 3, 3);
 
-    [Header("Visualization Settings")]
-    public float handleSize = 0.35f;
-    public bool showConnections = true;
-    public float connectionDistance = 3.0f;
-    public bool showLabels = false;
+    [HideInInspector] public float handleSize = 0.35f;
+    [HideInInspector] public bool showConnections = true;
+    [HideInInspector] public float connectionDistance = 3.0f;
+    [HideInInspector] public bool showLabels = false;
 
-    [Header("Texture Bake Settings")]
-    public string textureSavePath = "Assets/MoonlightVRC/Shadows/BakedPositionsTexture.asset";
+    [HideInInspector] public string textureSavePath = "Assets/MoonlightVRC/Shadows/BakedPositionsTexture.asset";
 
     // Internal selection state tracking child indices
     [HideInInspector]
