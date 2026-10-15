@@ -94,98 +94,137 @@ public class ProbeBaker : MonoBehaviour
 
         MeshRenderer[] renderers = FindObjectsOfType<MeshRenderer>();
 
-        for (int lmIndex = 0; lmIndex < lmCount; lmIndex++)
+        // Count total valid renderers for accurate progress tracking
+        int totalValidRenderers = 0;
+        foreach (var r in renderers)
         {
-            Texture2D lmColorTex = lightmaps[lmIndex].lightmapColor;
-            if (lmColorTex == null) continue;
+            if (r.lightmapIndex >= 0 && r.lightmapIndex < lmCount)
+                totalValidRenderers++;
+        }
 
-            Color[] indexPixels = new Color[maxWidth * maxHeight];
-            for (int i = 0; i < indexPixels.Length; i++)
-                indexPixels[i] = Color.clear;
+        int processedRenderers = 0;
+        bool cancelled = false;
 
-            foreach (var renderer in renderers)
+        try
+        {
+            for (int lmIndex = 0; lmIndex < lmCount; lmIndex++)
             {
-                if (renderer.lightmapIndex != lmIndex) continue;
+                Texture2D lmColorTex = lightmaps[lmIndex].lightmapColor;
+                if (lmColorTex == null) continue;
 
-                MeshFilter mf = renderer.GetComponent<MeshFilter>();
-                if (mf == null || mf.sharedMesh == null) continue;
+                Color[] indexPixels = new Color[maxWidth * maxHeight];
+                for (int i = 0; i < indexPixels.Length; i++)
+                    indexPixels[i] = Color.clear;
 
-                Mesh mesh = mf.sharedMesh;
-                Vector3[] vertices = mesh.vertices;
-                Vector3[] normals = mesh.normals;
-                Vector2[] uv2 = mesh.uv2;
-                if (uv2 == null || uv2.Length == 0) uv2 = mesh.uv;
-                int[] tris = mesh.triangles;
-
-                Matrix4x4 localToWorld = renderer.localToWorldMatrix;
-                Matrix4x4 normalMatrix = localToWorld.inverse.transpose;
-                Vector4 scaleOffset = renderer.lightmapScaleOffset;
-
-                Vector3[] worldVerts = new Vector3[vertices.Length];
-                Vector3[] worldNormals = new Vector3[vertices.Length];
-                Vector2[] uvPixels = new Vector2[vertices.Length];
-
-                for (int v = 0; v < vertices.Length; v++)
+                foreach (var renderer in renderers)
                 {
-                    worldVerts[v] = localToWorld.MultiplyPoint(vertices[v]);
-                    worldNormals[v] = (normals != null && normals.Length > v) ? normalMatrix.MultiplyVector(normals[v]).normalized : Vector3.up;
+                    if (renderer.lightmapIndex != lmIndex) continue;
 
-                    Vector2 lightmapUV = new Vector2(
-                        uv2[v].x * scaleOffset.x + scaleOffset.z,
-                        uv2[v].y * scaleOffset.y + scaleOffset.w
-                    );
-                    uvPixels[v] = new Vector2(lightmapUV.x * maxWidth, lightmapUV.y * maxHeight);
-                }
-
-                for (int t = 0; t < tris.Length; t += 3)
-                {
-                    int i0 = tris[t];
-                    int i1 = tris[t + 1];
-                    int i2 = tris[t + 2];
-
-                    Vector2 p0 = uvPixels[i0];
-                    Vector2 p1 = uvPixels[i1];
-                    Vector2 p2 = uvPixels[i2];
-
-                    int minX = Mathf.Clamp(Mathf.FloorToInt(Mathf.Min(p0.x, Mathf.Min(p1.x, p2.x))), 0, maxWidth - 1);
-                    int maxX = Mathf.Clamp(Mathf.CeilToInt(Mathf.Max(p0.x, Mathf.Max(p1.x, p2.x))), 0, maxWidth - 1);
-                    int minY = Mathf.Clamp(Mathf.FloorToInt(Mathf.Min(p0.y, Mathf.Min(p1.y, p2.y))), 0, maxHeight - 1);
-                    int maxY = Mathf.Clamp(Mathf.CeilToInt(Mathf.Max(p0.y, Mathf.Max(p1.y, p2.y))), 0, maxHeight - 1);
-
-                    for (int y = minY; y <= maxY; y++)
+                    processedRenderers++;
+                    float progress = (float)processedRenderers / Mathf.Max(1, totalValidRenderers);
+                    
+                    // Display progress bar with cancel capability
+                    if (UnityEditor.EditorUtility.DisplayCancelableProgressBar(
+                        "Baking Probe Texture Array",
+                        $"Processing Lightmap {lmIndex + 1}/{lmCount} (Mesh {processedRenderers}/{totalValidRenderers})",
+                        progress))
                     {
-                        for (int x = minX; x <= maxX; x++)
+                        cancelled = true;
+                        break;
+                    }
+
+                    MeshFilter mf = renderer.GetComponent<MeshFilter>();
+                    if (mf == null || mf.sharedMesh == null) continue;
+
+                    Mesh mesh = mf.sharedMesh;
+                    Vector3[] vertices = mesh.vertices;
+                    Vector3[] normals = mesh.normals;
+                    Vector2[] uv2 = mesh.uv2;
+                    if (uv2 == null || uv2.Length == 0) uv2 = mesh.uv;
+                    int[] tris = mesh.triangles;
+
+                    Matrix4x4 localToWorld = renderer.localToWorldMatrix;
+                    Matrix4x4 normalMatrix = localToWorld.inverse.transpose;
+                    Vector4 scaleOffset = renderer.lightmapScaleOffset;
+
+                    Vector3[] worldVerts = new Vector3[vertices.Length];
+                    Vector3[] worldNormals = new Vector3[vertices.Length];
+                    Vector2[] uvPixels = new Vector2[vertices.Length];
+
+                    for (int v = 0; v < vertices.Length; v++)
+                    {
+                        worldVerts[v] = localToWorld.MultiplyPoint(vertices[v]);
+                        worldNormals[v] = (normals != null && normals.Length > v) ? normalMatrix.MultiplyVector(normals[v]).normalized : Vector3.up;
+
+                        Vector2 lightmapUV = new Vector2(
+                            uv2[v].x * scaleOffset.x + scaleOffset.z,
+                            uv2[v].y * scaleOffset.y + scaleOffset.w
+                        );
+                        uvPixels[v] = new Vector2(lightmapUV.x * maxWidth, lightmapUV.y * maxHeight);
+                    }
+
+                    for (int t = 0; t < tris.Length; t += 3)
+                    {
+                        int i0 = tris[t];
+                        int i1 = tris[t + 1];
+                        int i2 = tris[t + 2];
+
+                        Vector2 p0 = uvPixels[i0];
+                        Vector2 p1 = uvPixels[i1];
+                        Vector2 p2 = uvPixels[i2];
+
+                        int minX = Mathf.Clamp(Mathf.FloorToInt(Mathf.Min(p0.x, Mathf.Min(p1.x, p2.x))), 0, maxWidth - 1);
+                        int maxX = Mathf.Clamp(Mathf.CeilToInt(Mathf.Max(p0.x, Mathf.Max(p1.x, p2.x))), 0, maxWidth - 1);
+                        int minY = Mathf.Clamp(Mathf.FloorToInt(Mathf.Min(p0.y, Mathf.Min(p1.y, p2.y))), 0, maxHeight - 1);
+                        int maxY = Mathf.Clamp(Mathf.CeilToInt(Mathf.Max(p0.y, Mathf.Max(p1.y, p2.y))), 0, maxHeight - 1);
+
+                        for (int y = minY; y <= maxY; y++)
                         {
-                            Vector2 pixelCenter = new Vector2(x + 0.5f, y + 0.5f);
-                            if (GetBarycentric(pixelCenter, p0, p1, p2, out float w0, out float w1, out float w2))
+                            for (int x = minX; x <= maxX; x++)
                             {
-                                Vector3 worldPos = worldVerts[i0] * w0 + worldVerts[i1] * w1 + worldVerts[i2] * w2;
-                                Vector3 worldNormal = (worldNormals[i0] * w0 + worldNormals[i1] * w1 + worldNormals[i2] * w2).normalized;
+                                Vector2 pixelCenter = new Vector2(x + 0.5f, y + 0.5f);
+                                if (GetBarycentric(pixelCenter, p0, p1, p2, out float w0, out float w1, out float w2))
+                                {
+                                    Vector3 worldPos = worldVerts[i0] * w0 + worldVerts[i1] * w1 + worldVerts[i2] * w2;
+                                    Vector3 worldNormal = (worldNormals[i0] * w0 + worldNormals[i1] * w1 + worldNormals[i2] * w2).normalized;
 
-                                int[] closest = Get3ClosestProbes(worldPos, worldNormal, probePositions);
+                                    int[] closest = Get3ClosestProbes(worldPos, worldNormal, probePositions);
 
-                                Color c = new Color(
-                                    (float)closest[0] / 65535.0f,
-                                    (float)closest[1] / 65535.0f,
-                                    (float)closest[2] / 65535.0f,
-                                    1.0f
-                                );
+                                    Color c = new Color(
+                                        (float)closest[0] / 65535.0f,
+                                        (float)closest[1] / 65535.0f,
+                                        (float)closest[2] / 65535.0f,
+                                        1.0f
+                                    );
 
-                                indexPixels[y * maxWidth + x] = c;
+                                    indexPixels[y * maxWidth + x] = c;
+                                }
                             }
                         }
                     }
                 }
+
+                if (cancelled) break;
+                textureArray.SetPixels(indexPixels, lmIndex);
             }
 
-            textureArray.SetPixels(indexPixels, lmIndex);
+            if (!cancelled)
+            {
+                textureArray.Apply();
+                UnityEditor.AssetDatabase.CreateAsset(textureArray, settings.probeIndexTextureArraySavePath);
+                UnityEditor.AssetDatabase.SaveAssets();
+                Debug.Log($"Probe index Texture2DArray successfully saved to: {settings.probeIndexTextureArraySavePath}");
+            }
+            else
+            {
+                Debug.LogWarning("Probe texture baking was cancelled.");
+            }
         }
-
-        textureArray.Apply();
-
-        UnityEditor.AssetDatabase.CreateAsset(textureArray, settings.probeIndexTextureArraySavePath);
-        UnityEditor.AssetDatabase.SaveAssets();
-        Debug.Log($"Probe index Texture2DArray successfully saved to: {settings.probeIndexTextureArraySavePath}");
+        finally
+        {
+            // Guaranteed to clear progress bar even if errors occur or baking is cancelled
+            UnityEditor.EditorUtility.ClearProgressBar();
+        }
         #endif
     }
 
@@ -228,14 +267,11 @@ public class ProbeBaker : MonoBehaviour
 
             Vector3 dirNormalized = dirToProbe / dist;
 
-            // 1. Directional check: Dot product > 0 (probe is in the direction of the normal)
             if (Vector3.Dot(dirNormalized, normal) <= 0f) continue;
 
-            // 2. Raycast visibility check: ensure no geometry blocks the line of sight
             Ray ray = new Ray(pos + normal * 0.001f, dirNormalized);
             if (Physics.Raycast(ray, out RaycastHit hit, dist - 0.002f, ~0, QueryTriggerInteraction.Ignore))
             {
-                // Occluded by geometry
                 continue;
             }
 
@@ -243,7 +279,6 @@ public class ProbeBaker : MonoBehaviour
             validDistances.Add(dist);
         }
 
-        // Sort valid probes by distance
         for (int i = 0; i < validProbes.Count - 1; i++)
         {
             for (int j = i + 1; j < validProbes.Count; j++)
@@ -278,7 +313,6 @@ public class ProbeBaker : MonoBehaviour
         }
         else
         {
-            // Fallback: If no probes pass the normal/raycast filters, fall back to absolute closest probes
             return GetClosestProbesAbsoluteFallback(pos, probePositions);
         }
 
