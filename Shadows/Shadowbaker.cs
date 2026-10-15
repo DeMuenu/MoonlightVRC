@@ -25,8 +25,17 @@ public class Shadowbaker : Editor
         OctreeSettings settings = (OctreeSettings)target;
         serializedObject.Update();
         EditorGUILayout.LabelField("Shadow Baker", EditorStyles.boldLabel);
-        DrawProperty("probeRootTransform", "Probe Root");
-        EditorGUILayout.LabelField($"{settings.ProbeRoot.childCount} probes", EditorStyles.miniLabel);
+        DrawProperty("probeRootTransform", "Probe Space");
+        EditorGUILayout.LabelField($"{settings.ProbeCount} probes (position data)", EditorStyles.miniLabel);
+        if (settings.ProbeCount == 0 && settings.ProbeRoot.childCount > 0)
+        {
+            if (GUILayout.Button("Convert Child Probes to Position Data"))
+            {
+                serializedObject.ApplyModifiedProperties();
+                ConvertChildProbes(settings);
+                serializedObject.Update();
+            }
+        }
         selectedTab = GUILayout.Toolbar(selectedTab, tabs);
         EditorGUILayout.Space();
         EditorGUI.BeginChangeCheck();
@@ -46,13 +55,16 @@ public class Shadowbaker : Editor
         DrawProperty("maxDepth", "Octree Detail");
         DrawProperty("colliderLayerMask", "Geometry Layers");
         EditorGUILayout.Space();
-        if (GUILayout.Button("Bake Shadows", GUILayout.Height(32)))
+        using (new EditorGUI.DisabledScope(settings.ProbeCount == 0))
         {
-            serializedObject.ApplyModifiedProperties();
-            new OctreeBaker(settings).BakeOctree();
-            ProbeBaker.BakeProbePositions(settings);
-            ProbeBaker.BakeClosestProbesTexture(settings);
-            ProbeBaker.ApplyLightmapIndicesAutomatically();
+            if (GUILayout.Button("Bake Shadows", GUILayout.Height(32)))
+            {
+                serializedObject.ApplyModifiedProperties();
+                new OctreeBaker(settings).BakeOctree();
+                ProbeBaker.BakeProbePositions(settings);
+                ProbeBaker.BakeClosestProbesTexture(settings);
+                ProbeBaker.ApplyLightmapIndicesAutomatically();
+            }
         }
         EditorGUILayout.LabelField("Uses existing Unity lightmaps and world-space probe positions.", EditorStyles.wordWrappedMiniLabel);
         showBakeAdvanced = EditorGUILayout.Foldout(showBakeAdvanced, "Advanced", true);
@@ -84,7 +96,7 @@ public class Shadowbaker : Editor
         serializedObject.ApplyModifiedProperties();
         if (GUILayout.Button("Generate Probe Grid", GUILayout.Height(30)))
         {
-            if (settings.ProbeRoot.childCount == 0 || EditorUtility.DisplayDialog("Generate Grid", "This will replace all existing child nodes. Are you sure?", "Yes", "Cancel"))
+            if (settings.ProbeCount == 0 || EditorUtility.DisplayDialog("Generate Grid", "This will replace all stored probe positions. Are you sure?", "Yes", "Cancel"))
                 GenerateGrid(settings);
         }
         EditorGUILayout.BeginHorizontal();
@@ -96,7 +108,6 @@ public class Shadowbaker : Editor
         EditorGUILayout.EndHorizontal();
         showNodeAdvanced = EditorGUILayout.Foldout(showNodeAdvanced, "Advanced", true);
         if (!showNodeAdvanced) return;
-        DrawProperty("nodePrefab", "Probe Prefab");
         serializedObject.ApplyModifiedProperties();
         if (GUILayout.Button("Append Grid")) AppendGrid(settings);
         DrawOperationsTab(settings);
@@ -112,21 +123,21 @@ public class Shadowbaker : Editor
         {
             UseBakedTexture("octreePreview.bakedTexture", settings.octreeSavePath);
         }
-        DrawProperty("probePreview.enabled", "Show Probe Shadows");
+        DrawProperty("probePreview.enabled", "Show Probes");
         if (serializedObject.FindProperty("probePreview.enabled").boolValue)
         {
-            DrawProperty("probePreview.shadowCalculationTexture", "Shadow Texture");
-            UseBakedTexture("probePreview.probePosTexture", settings.worldProbePositionSavePath);
-            DrawProperty("probePreview.targetLightIndex", "Light Index");
+            DrawProperty("probePreview.shadowCalculationTexture", "Shadow Texture (Optional)");
+            if (serializedObject.FindProperty("probePreview.shadowCalculationTexture").objectReferenceValue != null)
+                DrawProperty("probePreview.targetLightIndex", "Light Index");
         }
         showPreviewAdvanced = EditorGUILayout.Foldout(showPreviewAdvanced, "Advanced", true);
         if (!showPreviewAdvanced) return;
         DrawProperty("octreePreview.bakedTexture", "Octree Texture");
         DrawProperty("octreePreview.displayDepth", "Display Depth");
         DrawProperty("octreePreview.showOnlyOccupied", "Occupied Nodes Only");
-        DrawProperty("probePreview.probePosTexture", "Probe Positions Texture");
-        DrawProperty("probePreview.probeCount", "Probe Count");
         DrawProperty("probePreview.gizmoRadius", "Probe Radius");
+        if (serializedObject.FindProperty("probePreview.shadowCalculationTexture").objectReferenceValue != null)
+            DrawProperty("probePreview.liveUpdate", "Live Shadow Preview");
     }
 
     private void UseBakedTexture(string propertyName, string path)
@@ -261,10 +272,10 @@ public class Shadowbaker : Editor
 
     private void DrawNodeSceneGUI(OctreeSettings placer)
     {
-        Transform parentTransform = placer.ProbeRoot;
-        int childCount = parentTransform.childCount;
+        int childCount = placer.ProbeCount;
+        Vector3[] positions = placer.GetProbeWorldPositions();
 
-        placer.selectedIndices.RemoveAll(index => index >= childCount);
+        placer.selectedIndices.RemoveAll(index => index < 0 || index >= childCount);
 
         Event e = Event.current;
 
@@ -330,40 +341,30 @@ public class Shadowbaker : Editor
             Repaint();
         }
 
-        // Draw Connection Lines between neighbor nodes
-        if (placer.showConnections && childCount > 1)
+        if (childCount != placer.ProbeCount)
         {
-            Handles.color = new Color(0f, 0.8f, 1f, 0.25f);
-            for (int i = 0; i < childCount; i++)
-            {
-                Transform a = parentTransform.GetChild(i);
-                if (a == null) continue;
-                for (int j = i + 1; j < childCount; j++)
-                {
-                    Transform b = parentTransform.GetChild(j);
-                    if (b == null) continue;
+            childCount = placer.ProbeCount;
+            positions = placer.GetProbeWorldPositions();
+        }
+        var selected = new HashSet<int>(placer.selectedIndices);
 
-                    float dist = Vector3.Distance(a.position, b.position);
-                    if (dist <= placer.connectionDistance)
-                    {
-                        Handles.DrawLine(a.position, b.position);
-                    }
-                }
-            }
+        // Draw Connection Lines between neighbor nodes
+        if (placer.showConnections && childCount > 1 && e.type == EventType.Repaint)
+        {
+            DrawProbeConnections(positions, placer.connectionDistance);
         }
 
         // Draw and handle all node spheres
         for (int i = 0; i < childCount; i++)
         {
-            Transform child = parentTransform.GetChild(i);
-            if (child == null) continue;
+            Vector3 position = positions[i];
 
-            bool isSelected = placer.selectedIndices.Contains(i);
+            bool isSelected = selected.Contains(i);
             Handles.color = isSelected ? Color.yellow : Color.cyan;
 
-            float size = HandleUtility.GetHandleSize(child.position) * placer.handleSize;
+            float size = HandleUtility.GetHandleSize(position) * placer.handleSize;
             
-            if (Handles.Button(child.position, Quaternion.identity, size, size * 1.2f, Handles.SphereHandleCap))
+            if (Handles.Button(position, Quaternion.identity, size, size * 1.2f, Handles.SphereHandleCap))
             {
                 if (e.shift)
                 {
@@ -384,7 +385,7 @@ public class Shadowbaker : Editor
             // Optional Index Label
             if (placer.showLabels)
             {
-                Handles.Label(child.position + Vector3.up * (size * 1.2f), $"[{i}]", EditorStyles.whiteBoldLabel);
+                Handles.Label(position + Vector3.up * (size * 1.2f), $"[{i}]", EditorStyles.whiteBoldLabel);
             }
         }
 
@@ -392,7 +393,7 @@ public class Shadowbaker : Editor
         if (placer.selectedIndices.Count > 0)
         {
             Vector3 center = Vector3.zero;
-            foreach (int i in placer.selectedIndices) center += parentTransform.GetChild(i).position;
+            foreach (int i in placer.selectedIndices) center += positions[i];
             center /= placer.selectedIndices.Count;
 
             EditorGUI.BeginChangeCheck();
@@ -400,13 +401,12 @@ public class Shadowbaker : Editor
             if (EditorGUI.EndChangeCheck())
             {
                 Vector3 delta = newCenter - center;
+                Undo.RecordObject(placer, "Move Probe Group");
                 foreach (int i in placer.selectedIndices)
                 {
-                    Transform child = parentTransform.GetChild(i);
-                    Undo.RecordObject(child, "Move Node Group");
-                    child.position += delta;
-                    EditorUtility.SetDirty(child);
+                    placer.SetProbeWorldPosition(i, positions[i] + delta);
                 }
+                SaveProbeChanges(placer);
             }
         }
 
@@ -433,9 +433,34 @@ public class Shadowbaker : Editor
         );
     }
 
+    private static void DrawProbeConnections(Vector3[] positions, float distance)
+    {
+        if (distance <= 0f) return;
+        Handles.color = new Color(0f, 0.8f, 1f, 0.25f);
+        float squaredDistance = distance * distance;
+        var cells = new Dictionary<Vector3Int, List<Vector3>>();
+        foreach (Vector3 position in positions)
+        {
+            Vector3Int cell = Vector3Int.FloorToInt(position / distance);
+            for (int x = -1; x <= 1; x++)
+            for (int y = -1; y <= 1; y++)
+            for (int z = -1; z <= 1; z++)
+            {
+                if (!cells.TryGetValue(cell + new Vector3Int(x, y, z), out List<Vector3> neighbors)) continue;
+                foreach (Vector3 neighbor in neighbors)
+                    if ((position - neighbor).sqrMagnitude <= squaredDistance) Handles.DrawLine(position, neighbor);
+            }
+            if (!cells.TryGetValue(cell, out List<Vector3> bucket))
+            {
+                bucket = new List<Vector3>();
+                cells.Add(cell, bucket);
+            }
+            bucket.Add(position);
+        }
+    }
+
     private void PerformBoxSelection(OctreeSettings placer)
     {
-        Transform parentTransform = placer.ProbeRoot;
         Rect screenRect = RectMinMax(placer.boxStartMousePos, placer.boxCurrentMousePos);
 
         if (!Event.current.shift)
@@ -443,10 +468,9 @@ public class Shadowbaker : Editor
             placer.selectedIndices.Clear();
         }
 
-        for (int i = 0; i < parentTransform.childCount; i++)
+        for (int i = 0; i < placer.ProbeCount; i++)
         {
-            Transform child = parentTransform.GetChild(i);
-            Vector2 screenPoint = HandleUtility.WorldToGUIPoint(child.position);
+            Vector2 screenPoint = HandleUtility.WorldToGUIPoint(placer.GetProbeWorldPosition(i));
             if (screenRect.Contains(screenPoint))
             {
                 if (!placer.selectedIndices.Contains(i))
@@ -460,91 +484,70 @@ public class Shadowbaker : Editor
 
     private void SpawnNode(OctreeSettings placer, Vector3 worldPosition)
     {
-        Undo.RecordObject(placer.ProbeRoot, "Add Node");
-        
-        GameObject newChild;
-        if (placer.nodePrefab != null)
-        {
-            newChild = (GameObject)PrefabUtility.InstantiatePrefab(placer.nodePrefab, placer.ProbeRoot);
-            newChild.transform.position = worldPosition;
-        }
-        else
-        {
-            newChild = new GameObject("Node_" + placer.ProbeRoot.childCount);
-            newChild.transform.SetParent(placer.ProbeRoot, true);
-            newChild.transform.position = worldPosition;
-        }
-
+        if (placer.ProbeCount >= OctreeSettings.MaxProbeCount) return;
+        Undo.RecordObject(placer, "Add Probe");
+        placer.AddProbeWorldPosition(worldPosition);
         placer.selectedIndices.Clear();
-        placer.selectedIndices.Add(placer.ProbeRoot.childCount - 1);
-        EditorUtility.SetDirty(placer.gameObject);
+        placer.selectedIndices.Add(placer.ProbeCount - 1);
+        SaveProbeChanges(placer);
     }
 
     private void DuplicateSelectedNodes(OctreeSettings placer)
     {
-        Transform parentTransform = placer.ProbeRoot;
+        placer.selectedIndices.RemoveAll(i => i < 0 || i >= placer.ProbeCount);
         if (placer.selectedIndices.Count == 0) return;
+        if (placer.ProbeCount + placer.selectedIndices.Count > OctreeSettings.MaxProbeCount) return;
 
-        Undo.RegisterCompleteObjectUndo(parentTransform, "Duplicate Selected Nodes");
+        Undo.RecordObject(placer, "Duplicate Probes");
         List<int> newIndices = new List<int>();
         Vector3 offset = new Vector3(0.5f, 0f, 0.5f);
 
         foreach (int oldIndex in placer.selectedIndices)
         {
-            if (oldIndex >= parentTransform.childCount) continue;
-            Transform source = parentTransform.GetChild(oldIndex);
-
-            GameObject duplicate = placer.nodePrefab != null && PrefabUtility.IsPartOfPrefabAsset(placer.nodePrefab)
-                ? (GameObject)PrefabUtility.InstantiatePrefab(placer.nodePrefab, parentTransform)
-                : Instantiate(source.gameObject, parentTransform);
-
-            duplicate.name = source.name;
-            duplicate.transform.position = source.position + offset;
-
-            newIndices.Add(parentTransform.childCount - 1);
-            EditorUtility.SetDirty(duplicate);
+            placer.AddProbeWorldPosition(placer.GetProbeWorldPosition(oldIndex) + offset);
+            newIndices.Add(placer.ProbeCount - 1);
         }
 
         placer.selectedIndices = newIndices;
-        EditorUtility.SetDirty(placer.gameObject);
+        SaveProbeChanges(placer);
     }
 
     private void DeleteSelectedNodes(OctreeSettings placer)
     {
-        Transform parentTransform = placer.ProbeRoot;
         if (placer.selectedIndices.Count == 0) return;
 
+        Undo.RecordObject(placer, "Delete Probes");
         placer.selectedIndices.Sort((a, b) => b.CompareTo(a));
-        Undo.RegisterCompleteObjectUndo(parentTransform, "Delete Nodes");
 
         foreach (int index in placer.selectedIndices)
         {
-            if (index < parentTransform.childCount)
+            if (index >= 0 && index < placer.ProbeCount)
             {
-                Undo.DestroyObjectImmediate(parentTransform.GetChild(index).gameObject);
+                placer.RemoveProbeAt(index);
             }
         }
         placer.selectedIndices.Clear();
-        EditorUtility.SetDirty(placer.gameObject);
+        SaveProbeChanges(placer);
     }
 
     private void GenerateGrid(OctreeSettings placer)
     {
-        Transform t = placer.ProbeRoot;
-        Undo.RegisterFullObjectHierarchyUndo(t.gameObject, "Generate Grid");
-
-        while (t.childCount > 0)
-        {
-            Undo.DestroyObjectImmediate(t.GetChild(0).gameObject);
-        }
-
-        AppendGrid(placer);
+        if (!CanGenerateGrid(placer, false)) return;
+        Undo.RecordObject(placer, "Generate Probe Grid");
+        placer.ClearProbes();
+        AppendGridPositions(placer);
     }
 
     private void AppendGrid(OctreeSettings placer)
     {
+        if (!CanGenerateGrid(placer, true)) return;
+        Undo.RecordObject(placer, "Append Probe Grid");
+        AppendGridPositions(placer);
+    }
+
+    private void AppendGridPositions(OctreeSettings placer)
+    {
         Transform t = placer.ProbeRoot;
-        Undo.RecordObject(t.gameObject, "Append Grid");
 
         Vector3 startPos = t.position - placer.generatorSize * 0.5f;
         Vector3 step = new Vector3(
@@ -560,88 +563,96 @@ public class Shadowbaker : Editor
                 for (int z = 0; z < placer.generatorCount.z; z++)
                 {
                     Vector3 pos = startPos + new Vector3(x * step.x, y * step.y, z * step.z);
-                    GameObject go = placer.nodePrefab != null 
-                        ? (GameObject)PrefabUtility.InstantiatePrefab(placer.nodePrefab, t)
-                        : new GameObject($"Node_{t.childCount}");
-                    
-                    if (placer.nodePrefab == null) go.transform.SetParent(t, true);
-                    go.transform.position = pos;
-                    Undo.RegisterCreatedObjectUndo(go, "Create Node");
+                    placer.AddProbeWorldPosition(pos);
                 }
             }
         }
         placer.selectedIndices.Clear();
-        EditorUtility.SetDirty(t.gameObject);
+        SaveProbeChanges(placer);
     }
 
     private void CenterNodes(OctreeSettings placer)
     {
-        Transform t = placer.ProbeRoot;
-        Undo.RegisterCompleteObjectUndo(t, "Center Nodes");
-        foreach (Transform child in t)
+        Undo.RecordObject(placer, "Center Probes");
+        for (int i = 0; i < placer.ProbeCount; i++)
         {
-            child.position = t.position;
+            placer.SetProbeWorldPosition(i, placer.ProbeRoot.position);
         }
+        SaveProbeChanges(placer);
     }
 
     private void JitterSelected(OctreeSettings placer, float amount)
     {
-        Transform t = placer.ProbeRoot;
+        Undo.RecordObject(placer, "Jitter Probes");
         foreach (int i in placer.selectedIndices)
         {
-            Transform child = t.GetChild(i);
-            Undo.RecordObject(child, "Jitter Node");
-            child.position += Random.insideUnitSphere * amount;
+            if (i < 0 || i >= placer.ProbeCount) continue;
+            placer.SetProbeWorldPosition(i, placer.GetProbeWorldPosition(i) + Random.insideUnitSphere * amount);
         }
+        SaveProbeChanges(placer);
     }
 
     private void MirrorNodes(OctreeSettings placer, Vector3 axis)
     {
-        Transform t = placer.ProbeRoot;
-        Vector3 parentPos = t.position;
+        Undo.RecordObject(placer, "Mirror Probes");
+        Vector3 parentPos = placer.ProbeRoot.position;
         foreach (int i in placer.selectedIndices)
         {
-            Transform child = t.GetChild(i);
-            Undo.RecordObject(child, "Mirror Node");
-            Vector3 local = child.position - parentPos;
+            if (i < 0 || i >= placer.ProbeCount) continue;
+            Vector3 local = placer.GetProbeWorldPosition(i) - parentPos;
             local.Scale(Vector3.one - (axis * 2f)); // invert selected axis
-            child.position = parentPos + local;
+            placer.SetProbeWorldPosition(i, parentPos + local);
         }
+        SaveProbeChanges(placer);
     }
 
     private void BakePositionsToTexture(OctreeSettings placer)
     {
-        Transform t = placer.ProbeRoot;
-        int width = 256;
-        int height = 256;
-        int maxCapacity = width * height;
+        ProbeBaker.BakePositionTexture(placer.ProbePositions, placer.textureSavePath);
+    }
 
-        Texture2D tex = new Texture2D(width, height, TextureFormat.RGBAFloat, false);
-        tex.filterMode = FilterMode.Point;
-        tex.wrapMode = TextureWrapMode.Clamp;
+    private static bool CanGenerateGrid(OctreeSettings settings, bool append)
+    {
+        Vector3Int count = settings.generatorCount;
+        if (count.x < 1 || count.y < 1 || count.z < 1) return false;
+        double total = (double)count.x * count.y * count.z + (append ? settings.ProbeCount : 0);
+        if (total <= OctreeSettings.MaxProbeCount) return true;
+        Debug.LogError($"The grid exceeds the {OctreeSettings.MaxProbeCount} probe texture capacity.");
+        return false;
+    }
 
-        int childCount = t.childCount;
-        Color[] colors = new Color[maxCapacity];
+    private static void SaveProbeChanges(OctreeSettings settings)
+    {
+        EditorUtility.SetDirty(settings);
+        PrefabUtility.RecordPrefabInstancePropertyModifications(settings);
+        SceneView.RepaintAll();
+    }
 
-        for (int i = 0; i < maxCapacity; i++)
+    private static void ConvertChildProbes(OctreeSettings settings)
+    {
+        Transform root = settings.ProbeRoot;
+        if (settings.ProbeCount + root.childCount > OctreeSettings.MaxProbeCount) return;
+        if (settings.transform != root && settings.transform.IsChildOf(root))
         {
-            if (i < childCount)
-            {
-                Vector3 pos = t.GetChild(i).localPosition;
-                colors[i] = new Color(pos.x, pos.y, pos.z, 1.0f);
-            }
-            else
-            {
-                colors[i] = Color.clear;
-            }
+            Debug.LogError("Choose a probe space whose children do not contain the OctreeSettings component before converting.");
+            return;
         }
-
-        tex.SetPixels(colors);
-        tex.Apply();
-
-        AssetDatabase.CreateAsset(tex, placer.textureSavePath);
-        AssetDatabase.SaveAssets();
-        Debug.Log($"<color=green>Successfully baked {childCount} node positions to texture:</color> {placer.textureSavePath}");
+        if (!EditorUtility.DisplayDialog("Convert Child Probes", "Store the direct children's positions as probe data and remove their GameObjects (including any attached components). This can be undone.", "Convert", "Cancel")) return;
+        Undo.IncrementCurrentGroup();
+        int group = Undo.GetCurrentGroup();
+        Undo.SetCurrentGroupName("Convert Child Probes");
+        Undo.RegisterCompleteObjectUndo(settings, "Convert Child Probes");
+        var children = new GameObject[root.childCount];
+        for (int i = 0; i < children.Length; i++)
+        {
+            Transform child = root.GetChild(i);
+            settings.AddProbeWorldPosition(child.position);
+            children[i] = child.gameObject;
+        }
+        foreach (GameObject child in children) Undo.DestroyObjectImmediate(child);
+        settings.selectedIndices.Clear();
+        SaveProbeChanges(settings);
+        Undo.CollapseUndoOperations(group);
     }
 }
 #endif

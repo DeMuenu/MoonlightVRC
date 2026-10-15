@@ -166,46 +166,7 @@ public class OctreeBaker
     
     public void BakeProbePositions()
     {
-
-        int width = 256;
-        int height = 256;
-        int maxCapacity = width * height;
-
-        // Create an RGBAFloat texture to preserve high-precision coordinates
-        Texture2D tex = new Texture2D(width, height, TextureFormat.RGBAFloat, false);
-        tex.filterMode = FilterMode.Point;
-        tex.wrapMode = TextureWrapMode.Clamp;
-
-        int childCount = settings.ProbeRoot.childCount;
-        Debug.Log($"Baking {childCount} children positions (Max capacity: {maxCapacity}).");
-
-        Color[] colors = new Color[maxCapacity];
-
-        for (int i = 0; i < maxCapacity; i++)
-        {
-            if (i < childCount)
-            {
-                Transform child = settings.ProbeRoot.GetChild(i);
-                // Use localPosition (or child.position for world space)
-                Vector3 pos = child.localPosition; 
-                colors[i] = new Color(pos.x, pos.y, pos.z, 1.0f);
-            }
-            else
-            {
-                // Fill remaining pixels with zero if there are fewer than 65,536 children
-                colors[i] = Color.clear;
-            }
-        }
-
-        tex.SetPixels(colors);
-        tex.Apply();
-
-        // Save the texture asset in the Unity Editor
-        #if UNITY_EDITOR
-        UnityEditor.AssetDatabase.CreateAsset(tex, settings.probePositionSavePath);
-        UnityEditor.AssetDatabase.SaveAssets();
-        Debug.Log($"Position texture successfully saved to: {settings.probePositionSavePath}");
-        #endif
+        ProbeBaker.BakePositionTexture(settings.ProbePositions, settings.probePositionSavePath);
     }
 }
 #endif

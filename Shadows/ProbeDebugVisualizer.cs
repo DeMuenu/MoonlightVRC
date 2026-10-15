@@ -40,23 +40,30 @@ public class ProbeDebugVisualizer : MonoBehaviour
         };
     }
 
-    public static void DrawGizmos(OctreeSettings.ProbePreviewSettings settings, ref Texture2D cachedShadowTex)
+    public static void DrawGizmos(OctreeSettings.ProbePreviewSettings settings, ref Texture2D cachedShadowTex, OctreeSettings source = null)
     {
-        if (settings.probePosTexture == null || settings.shadowCalculationTexture == null)
-            return;
+        if (source == null && (settings.probePosTexture == null || settings.shadowCalculationTexture == null)) return;
+        int count = source != null ? source.ProbeCount : Mathf.Min(settings.probeCount, settings.probePosTexture.width * settings.probePosTexture.height);
+        if (count == 0) return;
 
-        UpdateCachedShadowTexture(settings.shadowCalculationTexture, ref cachedShadowTex);
+        bool showShadows = settings.shadowCalculationTexture != null;
+        if (showShadows && (settings.liveUpdate || cachedShadowTex == null || cachedShadowTex.width != settings.shadowCalculationTexture.width || cachedShadowTex.height != settings.shadowCalculationTexture.height))
+            UpdateCachedShadowTexture(settings.shadowCalculationTexture, ref cachedShadowTex);
 
-        if (cachedShadowTex == null)
-            return;
+        int shadowTexWidth = showShadows ? cachedShadowTex.width : 0;
+        Matrix4x4 probeToWorld = source != null ? source.ProbeRoot.localToWorldMatrix : Matrix4x4.identity;
 
-        int shadowTexWidth = cachedShadowTex.width;
-
-        for (int i = 0; i < settings.probeCount; i++)
+        for (int i = 0; i < count; i++)
         {
-            Vector3 probePos = GetProbePositionFromTexture(settings.probePosTexture, i);
+            Vector3 probePos = source != null ? probeToWorld.MultiplyPoint3x4(source.ProbePositions[i]) : GetProbePositionFromTexture(settings.probePosTexture, i);
+            if (!showShadows)
+            {
+                Gizmos.color = Color.cyan;
+                Gizmos.DrawSphere(probePos, settings.gizmoRadius);
+                continue;
+            }
 
-            uint sampleIndex = (uint)settings.targetLightIndex * (uint)settings.probeCount + (uint)i;
+            uint sampleIndex = (uint)settings.targetLightIndex * (uint)(source != null ? count : settings.probeCount) + (uint)i;
             uint pixelLinearIndex = sampleIndex / 4u;
             uint channelIndex = sampleIndex % 4u; // 0=R, 1=G, 2=B, 3=A
 
@@ -104,11 +111,15 @@ public class ProbeDebugVisualizer : MonoBehaviour
         }
 
         RenderTexture currentRT = RenderTexture.active;
-        RenderTexture.active = shadowCalculationTexture;
-        
-        cachedShadowTex.ReadPixels(new Rect(0, 0, width, height), 0, 0);
-        cachedShadowTex.Apply();
-
-        RenderTexture.active = currentRT;
+        try
+        {
+            RenderTexture.active = shadowCalculationTexture;
+            cachedShadowTex.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+            cachedShadowTex.Apply();
+        }
+        finally
+        {
+            RenderTexture.active = currentRT;
+        }
     }
 }

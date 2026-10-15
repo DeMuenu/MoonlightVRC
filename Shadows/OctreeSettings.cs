@@ -9,8 +9,27 @@ public class OctreeSettings : MonoBehaviour
     public int textureWidth = 512;
     public int textureHeight = 512;
 
-    [Tooltip("The parent transform whose children will be baked. Defaults to this object if left empty.")]
+    [Tooltip("Coordinate frame for probe positions. Defaults to this object. Individual probes are stored as vectors, not child objects.")]
     public Transform probeRootTransform;
+
+    public const int MaxProbeCount = 256 * 256;
+    [SerializeField, HideInInspector] private List<Vector3> probePositions = new List<Vector3>();
+    public IReadOnlyList<Vector3> ProbePositions => probePositions;
+    public int ProbeCount => probePositions.Count;
+
+    public Vector3 GetProbeWorldPosition(int index) => ProbeRoot.TransformPoint(probePositions[index]);
+    public void SetProbeWorldPosition(int index, Vector3 position) => probePositions[index] = ProbeRoot.InverseTransformPoint(position);
+    public void AddProbeWorldPosition(Vector3 position) => probePositions.Add(ProbeRoot.InverseTransformPoint(position));
+    public void RemoveProbeAt(int index) => probePositions.RemoveAt(index);
+    public void ClearProbes() => probePositions.Clear();
+
+    public Vector3[] GetProbeWorldPositions()
+    {
+        Vector3[] positions = new Vector3[ProbeCount];
+        Matrix4x4 matrix = ProbeRoot.localToWorldMatrix;
+        for (int i = 0; i < positions.Length; i++) positions[i] = matrix.MultiplyPoint3x4(probePositions[i]);
+        return positions;
+    }
 
     [Tooltip("Path within the Assets folder to save the texture asset.")]
     public string probePositionSavePath = "Assets/MoonlightVRC/Shadows/BakedNodePositions.asset";
@@ -19,7 +38,7 @@ public class OctreeSettings : MonoBehaviour
     public string worldProbePositionSavePath = "Assets/MoonlightVRC/Shadows/ProbePositions.asset";
     public string probeIndexTextureArraySavePath = "Assets/MoonlightVRC/Shadows/ProbeIndicesTextureArray.asset";
 
-    public GameObject nodePrefab;
+    [HideInInspector] public GameObject nodePrefab; // Legacy migration data only.
     public Vector3 generatorSize = new Vector3(5f, 5f, 5f);
     public Vector3Int generatorCount = new Vector3Int(3, 3, 3);
     [Range(0.05f, 2f)] public float handleSize = 0.35f;
@@ -66,7 +85,7 @@ public class OctreeSettings : MonoBehaviour
 
     private void OnDrawGizmos()
     {
-        if (probePreview.enabled) ProbeDebugVisualizer.DrawGizmos(probePreview, ref cachedShadowTex);
+        if (probePreview.enabled) ProbeDebugVisualizer.DrawGizmos(probePreview, ref cachedShadowTex, this);
     }
 
     private void OnDrawGizmosSelected()

@@ -16,29 +16,32 @@ public class ProbeBaker : MonoBehaviour
     [HideInInspector] public BakeSettings settings;
     [HideInInspector] public OctreeSettings settingsOwner;
 
-    private static BakeSettings GetSettings(OctreeSettings source)
+    private Vector3[] GetLegacyProbePositions()
     {
-        return new BakeSettings
-        {
-            probeRootTransform = source.ProbeRoot,
-            probePositionSavePath = source.worldProbePositionSavePath,
-            probeIndexTextureArraySavePath = source.probeIndexTextureArraySavePath
-        };
+        Transform root = settings.probeRootTransform;
+        Vector3[] positions = new Vector3[root.childCount];
+        for (int i = 0; i < positions.Length; i++) positions[i] = root.GetChild(i).position;
+        return positions;
     }
 
     public void BakeProbePositions()
     {
         if (settingsOwner != null) BakeProbePositions(settingsOwner);
-        else BakeProbePositions(settings);
+        else BakePositionTexture(GetLegacyProbePositions(), settings.probePositionSavePath);
     }
 
     public static void BakeProbePositions(OctreeSettings source)
     {
-        BakeProbePositions(GetSettings(source));
+        BakePositionTexture(source.GetProbeWorldPositions(), source.worldProbePositionSavePath);
     }
 
-    private static void BakeProbePositions(BakeSettings settings)
+    public static void BakePositionTexture(IReadOnlyList<Vector3> positions, string savePath)
     {
+        if (positions.Count > OctreeSettings.MaxProbeCount)
+        {
+            Debug.LogError($"Cannot bake more than {OctreeSettings.MaxProbeCount} probes into the position texture.");
+            return;
+        }
         int width = 256;
         int height = 256;
         int maxCapacity = width * height;
@@ -47,58 +50,56 @@ public class ProbeBaker : MonoBehaviour
         tex.filterMode = FilterMode.Point;
         tex.wrapMode = TextureWrapMode.Clamp;
 
-        int childCount = settings.probeRootTransform.childCount;
+        int childCount = positions.Count;
         Color[] colors = new Color[maxCapacity];
 
-        for (int i = 0; i < maxCapacity; i++)
+        for (int i = 0; i < childCount; i++)
         {
-            if (i < childCount)
-            {
-                Transform child = settings.probeRootTransform.GetChild(i);
-                Vector3 pos = child.position; 
-                colors[i] = new Color(pos.x, pos.y, pos.z, 1.0f);
-            }
-            else
-            {
-                colors[i] = Color.clear;
-            }
+            Vector3 pos = positions[i];
+            colors[i] = new Color(pos.x, pos.y, pos.z, 1.0f);
         }
 
         tex.SetPixels(colors);
         tex.Apply();
 
         #if UNITY_EDITOR
-        UnityEditor.AssetDatabase.CreateAsset(tex, settings.probePositionSavePath);
+        Texture2D existing = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(savePath);
+        if (existing != null)
+        {
+            UnityEditor.EditorUtility.CopySerialized(tex, existing);
+            DestroyImmediate(tex);
+        }
+        else UnityEditor.AssetDatabase.CreateAsset(tex, savePath);
         UnityEditor.AssetDatabase.SaveAssets();
-        Debug.Log($"Position texture successfully saved to: {settings.probePositionSavePath}");
+        Debug.Log($"Position texture successfully saved to: {savePath}");
         #endif
     }
 
     public void BakeClosestProbesTexture()
     {
         if (settingsOwner != null) BakeClosestProbesTexture(settingsOwner);
-        else BakeClosestProbesTexture(settings);
+        else BakeClosestProbesTexture(GetLegacyProbePositions(), settings.probeIndexTextureArraySavePath);
     }
 
     public static void BakeClosestProbesTexture(OctreeSettings source)
     {
-        BakeClosestProbesTexture(GetSettings(source));
+        BakeClosestProbesTexture(source.GetProbeWorldPositions(), source.probeIndexTextureArraySavePath);
     }
 
-    private static void BakeClosestProbesTexture(BakeSettings settings)
+    private static void BakeClosestProbesTexture(Vector3[] probePositions, string savePath)
     {
         #if UNITY_EDITOR
-        int childCount = settings.probeRootTransform.childCount;
+        int childCount = probePositions.Length;
         if (childCount == 0)
         {
-            Debug.LogError("No probes found under probeRootTransform.");
+            Debug.LogError("No probe positions found. Generate or convert probes first.");
             return;
         }
 
-        Vector3[] probePositions = new Vector3[childCount];
-        for (int i = 0; i < childCount; i++)
+        if (childCount > OctreeSettings.MaxProbeCount)
         {
-            probePositions[i] = settings.probeRootTransform.GetChild(i).position;
+            Debug.LogError($"Cannot bake more than {OctreeSettings.MaxProbeCount} probe indices.");
+            return;
         }
 
         int[] probeIndices = new int[childCount];
@@ -251,9 +252,9 @@ public class ProbeBaker : MonoBehaviour
             if (!cancelled)
             {
                 textureArray.Apply();
-                UnityEditor.AssetDatabase.CreateAsset(textureArray, settings.probeIndexTextureArraySavePath);
+                UnityEditor.AssetDatabase.CreateAsset(textureArray, savePath);
                 UnityEditor.AssetDatabase.SaveAssets();
-                Debug.Log($"Probe index Texture2DArray successfully saved to: {settings.probeIndexTextureArraySavePath}");
+                Debug.Log($"Probe index Texture2DArray successfully saved to: {savePath}");
             }
             else
             {
