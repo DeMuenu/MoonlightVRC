@@ -16,12 +16,47 @@ public class OctreeSettings : MonoBehaviour
     [SerializeField, HideInInspector] private List<Vector3> probePositions = new List<Vector3>();
     public IReadOnlyList<Vector3> ProbePositions => probePositions;
     public int ProbeCount => probePositions.Count;
+    [System.NonSerialized] private int probeRevision;
+    public int ProbeRevision => probeRevision;
 
     public Vector3 GetProbeWorldPosition(int index) => ProbeRoot.TransformPoint(probePositions[index]);
-    public void SetProbeWorldPosition(int index, Vector3 position) => probePositions[index] = ProbeRoot.InverseTransformPoint(position);
-    public void AddProbeWorldPosition(Vector3 position) => probePositions.Add(ProbeRoot.InverseTransformPoint(position));
-    public void RemoveProbeAt(int index) => probePositions.RemoveAt(index);
-    public void ClearProbes() => probePositions.Clear();
+    public void SetProbeWorldPosition(int index, Vector3 position)
+    {
+        probePositions[index] = ProbeRoot.InverseTransformPoint(position);
+        probeRevision++;
+    }
+    public void AddProbeWorldPosition(Vector3 position)
+    {
+        probePositions.Add(ProbeRoot.InverseTransformPoint(position));
+        probeRevision++;
+    }
+    public void RemoveProbeAt(int index)
+    {
+        probePositions.RemoveAt(index);
+        probeRevision++;
+    }
+    public void ClearProbes()
+    {
+        probePositions.Clear();
+        probeRevision++;
+    }
+
+    public void TranslateProbes(IReadOnlyList<int> indices, Vector3 worldDelta)
+    {
+        Vector3 localDelta = ProbeRoot.worldToLocalMatrix.MultiplyVector(worldDelta);
+        for (int i = 0; i < indices.Count; i++) probePositions[indices[i]] += localDelta;
+        probeRevision++;
+    }
+
+    public void RemoveProbes(IReadOnlyList<int> indices)
+    {
+        var removed = new HashSet<int>(indices);
+        int remaining = 0;
+        for (int i = 0; i < probePositions.Count; i++)
+            if (!removed.Contains(i)) probePositions[remaining++] = probePositions[i];
+        probePositions.RemoveRange(remaining, probePositions.Count - remaining);
+        probeRevision++;
+    }
 
     public Vector3[] GetProbeWorldPositions()
     {
@@ -85,6 +120,10 @@ public class OctreeSettings : MonoBehaviour
 
     private void OnDrawGizmos()
     {
+        #if UNITY_EDITOR
+        // The selected editor draws a batched point cloud instead of a second sphere per probe.
+        if (editNodes && UnityEditor.Selection.Contains(gameObject)) return;
+        #endif
         if (probePreview.enabled) ProbeDebugVisualizer.DrawGizmos(probePreview, ref cachedShadowTex, this);
     }
 

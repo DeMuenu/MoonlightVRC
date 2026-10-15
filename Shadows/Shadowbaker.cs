@@ -7,6 +7,9 @@ using System.Collections.Generic;
 public class Shadowbaker : Editor
 {
     private readonly OctreeVisualizer octreeVisualizer = new OctreeVisualizer();
+    private readonly ProbeSceneRenderer probeSceneRenderer = new ProbeSceneRenderer();
+    private readonly ProbeSceneConnections probeConnections = new ProbeSceneConnections();
+    private const int MaxProbeLabels = 64;
     [SerializeField] private int selectedTab = 0;
     [SerializeField] private bool showBakeAdvanced;
     [SerializeField] private bool showNodeAdvanced;
@@ -18,6 +21,22 @@ public class Shadowbaker : Editor
     {
         OctreeSettings settings = (OctreeSettings)target;
         MigrateSettings(settings);
+        Undo.undoRedoPerformed -= OnProbeUndoRedo;
+        Undo.undoRedoPerformed += OnProbeUndoRedo;
+    }
+
+    private void OnDisable()
+    {
+        Undo.undoRedoPerformed -= OnProbeUndoRedo;
+        probeSceneRenderer.Dispose();
+    }
+
+    private void OnProbeUndoRedo()
+    {
+        probeSceneRenderer.Invalidate();
+        probeConnections.Invalidate();
+        Repaint();
+        SceneView.RepaintAll();
     }
 
     public override void OnInspectorGUI()
@@ -214,6 +233,7 @@ public class Shadowbaker : Editor
             if (GUILayout.Button($"Clear Selection ({placer.selectedIndices.Count} selected)", GUILayout.Height(25)))
             {
                 placer.selectedIndices.Clear();
+                probeSceneRenderer.InvalidateSelection();
                 Repaint();
             }
         }
@@ -272,125 +292,31 @@ public class Shadowbaker : Editor
 
     private void DrawNodeSceneGUI(OctreeSettings placer)
     {
-        int childCount = placer.ProbeCount;
-        Vector3[] positions = placer.GetProbeWorldPositions();
-
-        placer.selectedIndices.RemoveAll(index => index < 0 || index >= childCount);
-
         Event e = Event.current;
+        Camera camera = SceneView.currentDrawingSceneView != null ? SceneView.currentDrawingSceneView.camera : null;
+        if (camera == null) return;
+        int control = GUIUtility.GetControlID("MoonlightProbeEditor".GetHashCode(), FocusType.Passive);
+        if (e.type == EventType.Layout && !e.alt) HandleUtility.AddDefaultControl(control);
+        placer.selectedIndices.RemoveAll(index => index < 0 || index >= placer.ProbeCount);
 
-        // Handle Marquee Box Selection (Ctrl / Cmd + Drag)
-        if (e.control || e.command)
+        if (e.type == EventType.KeyDown && placer.selectedIndices.Count > 0 &&
+            (e.keyCode == KeyCode.Delete || e.keyCode == KeyCode.Backspace))
         {
-            if (e.type == EventType.MouseDown && e.button == 0)
-            {
-                placer.isDraggingBox = true;
-                placer.boxStartMousePos = e.mousePosition;
-                placer.boxCurrentMousePos = e.mousePosition;
-                e.Use();
-            }
-            else if (e.type == EventType.MouseDrag && placer.isDraggingBox)
-            {
-                placer.boxCurrentMousePos = e.mousePosition;
-                e.Use();
-                Repaint();
-            }
-            else if (e.type == EventType.MouseUp && placer.isDraggingBox)
-            {
-                placer.isDraggingBox = false;
-                PerformBoxSelection(placer);
-                e.Use();
-                Repaint();
-            }
-        }
-        else if (placer.isDraggingBox && e.type == EventType.MouseUp)
-        {
-            placer.isDraggingBox = false;
+            DeleteSelectedNodes(placer);
+            e.Use();
             Repaint();
         }
-
-        // Draw selection box UI rect
-        if (placer.isDraggingBox)
+        if ((e.type == EventType.ValidateCommand || e.type == EventType.ExecuteCommand) &&
+            e.commandName == "Duplicate" && placer.selectedIndices.Count > 0)
         {
-            Handles.BeginGUI();
-            Rect rect = RectMinMax(placer.boxStartMousePos, placer.boxCurrentMousePos);
-            EditorGUI.DrawRect(rect, new Color(0, 0.5f, 1f, 0.15f));
-            Handles.DrawSolidRectangleWithOutline(rect, Color.clear, new Color(0, 0.5f, 1f, 0.8f));
-            Handles.EndGUI();
-            Repaint();
-        }
-
-        // Keyboard shortcuts
-        if (e.type == EventType.KeyDown)
-        {
-            if (e.keyCode == KeyCode.Delete || e.keyCode == KeyCode.Backspace)
-            {
-                DeleteSelectedNodes(placer);
-                e.Use();
-                Repaint();
-            }
-        }
-
-        if ((e.type == EventType.ValidateCommand || e.type == EventType.ExecuteCommand) && e.commandName == "Duplicate")
-        {
-            if (e.type == EventType.ExecuteCommand)
-            {
-                DuplicateSelectedNodes(placer);
-            }
+            if (e.type == EventType.ExecuteCommand) DuplicateSelectedNodes(placer);
             e.Use();
             Repaint();
         }
 
-        if (childCount != placer.ProbeCount)
-        {
-            childCount = placer.ProbeCount;
-            positions = placer.GetProbeWorldPositions();
-        }
-        var selected = new HashSet<int>(placer.selectedIndices);
-
-        // Draw Connection Lines between neighbor nodes
-        if (placer.showConnections && childCount > 1 && e.type == EventType.Repaint)
-        {
-            DrawProbeConnections(positions, placer.connectionDistance);
-        }
-
-        // Draw and handle all node spheres
-        for (int i = 0; i < childCount; i++)
-        {
-            Vector3 position = positions[i];
-
-            bool isSelected = selected.Contains(i);
-            Handles.color = isSelected ? Color.yellow : Color.cyan;
-
-            float size = HandleUtility.GetHandleSize(position) * placer.handleSize;
-            
-            if (Handles.Button(position, Quaternion.identity, size, size * 1.2f, Handles.SphereHandleCap))
-            {
-                if (e.shift)
-                {
-                    if (placer.selectedIndices.Contains(i))
-                        placer.selectedIndices.Remove(i);
-                    else
-                        placer.selectedIndices.Add(i);
-                }
-                else
-                {
-                    placer.selectedIndices.Clear();
-                    placer.selectedIndices.Add(i);
-                }
-                EditorUtility.SetDirty(placer);
-                Repaint();
-            }
-
-            // Optional Index Label
-            if (placer.showLabels)
-            {
-                Handles.Label(position + Vector3.up * (size * 1.2f), $"[{i}]", EditorStyles.whiteBoldLabel);
-            }
-        }
-
-        // Group Translation Handle
-        if (placer.selectedIndices.Count > 0)
+        Vector3[] positions = probeSceneRenderer.GetPositions(placer);
+        // One move handle for the whole selection, never one IMGUI control per probe.
+        if (placer.selectedIndices.Count > 0 && !placer.isDraggingBox)
         {
             Vector3 center = Vector3.zero;
             foreach (int i in placer.selectedIndices) center += positions[i];
@@ -402,24 +328,94 @@ public class Shadowbaker : Editor
             {
                 Vector3 delta = newCenter - center;
                 Undo.RecordObject(placer, "Move Probe Group");
-                foreach (int i in placer.selectedIndices)
-                {
-                    placer.SetProbeWorldPosition(i, positions[i] + delta);
-                }
+                placer.TranslateProbes(placer.selectedIndices, delta);
                 SaveProbeChanges(placer);
+                positions = probeSceneRenderer.GetPositions(placer);
             }
         }
 
-        // Shift + Click to spawn new node onto colliders
-        if (e.type == EventType.MouseDown && e.shift && e.button == 0 && !e.control && !e.command)
+        if (e.type == EventType.MouseDown && e.button == 0 && !e.alt &&
+            GUIUtility.hotControl == 0 && HandleUtility.nearestControl == control)
         {
-            Ray ray = HandleUtility.GUIPointToWorldRay(e.mousePosition);
-            if (Physics.Raycast(ray, out RaycastHit hit))
+            if (e.control || e.command)
             {
-                SpawnNode(placer, hit.point + hit.normal * 0.05f);
+                placer.isDraggingBox = true;
+                placer.boxStartMousePos = placer.boxCurrentMousePos = e.mousePosition;
+                GUIUtility.hotControl = control;
+            }
+            else
+            {
+                int picked = PickProbe(positions, e.mousePosition, camera, MarkerRadius(placer) + 3f);
+                if (picked >= 0)
+                {
+                    if (!e.shift) placer.selectedIndices.Clear();
+                    if (e.shift && placer.selectedIndices.Contains(picked)) placer.selectedIndices.Remove(picked);
+                    else placer.selectedIndices.Add(picked);
+                    probeSceneRenderer.InvalidateSelection();
+                    EditorUtility.SetDirty(placer);
+                }
+                else if (e.shift && Physics.Raycast(HandleUtility.GUIPointToWorldRay(e.mousePosition), out RaycastHit hit))
+                    SpawnNode(placer, hit.point + hit.normal * 0.05f);
+            }
+            e.Use();
+            SceneView.RepaintAll();
+            Repaint();
+        }
+        if (placer.isDraggingBox && GUIUtility.hotControl == control)
+        {
+            if (e.type == EventType.Ignore || (e.type == EventType.KeyDown && e.keyCode == KeyCode.Escape))
+            {
+                placer.isDraggingBox = false;
+                GUIUtility.hotControl = 0;
+                if (e.type != EventType.Ignore) e.Use();
+                SceneView.RepaintAll();
+            }
+            else if (e.type == EventType.MouseDrag)
+            {
+                placer.boxCurrentMousePos = e.mousePosition;
                 e.Use();
+                SceneView.RepaintAll();
+            }
+            else if (e.type == EventType.MouseUp)
+            {
+                placer.boxCurrentMousePos = e.mousePosition;
+                placer.isDraggingBox = false;
+                GUIUtility.hotControl = 0;
+                PerformBoxSelection(placer, positions, camera);
+                e.Use();
+                SceneView.RepaintAll();
                 Repaint();
             }
+        }
+
+        if (e.type != EventType.Repaint) return;
+        probeSceneRenderer.Draw(placer, camera, MarkerRadius(placer));
+        positions = probeSceneRenderer.GetPositions(placer);
+        if (placer.showConnections)
+        {
+            probeConnections.Build(positions, placer.selectedIndices, placer.connectionDistance);
+            if (probeConnections.Lines.Count > 0)
+            {
+                Handles.color = new Color(0f, 0.8f, 1f, 0.25f);
+                Handles.DrawLines(probeConnections.Lines.ToArray());
+            }
+        }
+        if (placer.showLabels)
+        {
+            int labelCount = Mathf.Min(MaxProbeLabels, placer.selectedIndices.Count > 0 ? placer.selectedIndices.Count : positions.Length);
+            for (int i = 0; i < labelCount; i++)
+            {
+                int index = placer.selectedIndices.Count > 0 ? placer.selectedIndices[i] : i;
+                if (IsInFrontOfCamera(positions[index], camera)) Handles.Label(positions[index], $"[{index}]", EditorStyles.whiteBoldLabel);
+            }
+        }
+        if (placer.isDraggingBox)
+        {
+            Handles.BeginGUI();
+            Rect rect = RectMinMax(placer.boxStartMousePos, placer.boxCurrentMousePos);
+            EditorGUI.DrawRect(rect, new Color(0, 0.5f, 1f, 0.15f));
+            Handles.DrawSolidRectangleWithOutline(rect, Color.clear, new Color(0, 0.5f, 1f, 0.8f));
+            Handles.EndGUI();
         }
     }
 
@@ -433,52 +429,50 @@ public class Shadowbaker : Editor
         );
     }
 
-    private static void DrawProbeConnections(Vector3[] positions, float distance)
+    private static float MarkerRadius(OctreeSettings settings) => Mathf.Clamp(settings.handleSize * 12f, 2f, 12f);
+
+    private static bool IsInFrontOfCamera(Vector3 position, Camera camera)
     {
-        if (distance <= 0f) return;
-        Handles.color = new Color(0f, 0.8f, 1f, 0.25f);
-        float squaredDistance = distance * distance;
-        var cells = new Dictionary<Vector3Int, List<Vector3>>();
-        foreach (Vector3 position in positions)
-        {
-            Vector3Int cell = Vector3Int.FloorToInt(position / distance);
-            for (int x = -1; x <= 1; x++)
-            for (int y = -1; y <= 1; y++)
-            for (int z = -1; z <= 1; z++)
-            {
-                if (!cells.TryGetValue(cell + new Vector3Int(x, y, z), out List<Vector3> neighbors)) continue;
-                foreach (Vector3 neighbor in neighbors)
-                    if ((position - neighbor).sqrMagnitude <= squaredDistance) Handles.DrawLine(position, neighbor);
-            }
-            if (!cells.TryGetValue(cell, out List<Vector3> bucket))
-            {
-                bucket = new List<Vector3>();
-                cells.Add(cell, bucket);
-            }
-            bucket.Add(position);
-        }
+        return Vector3.Dot(position - camera.transform.position, camera.transform.forward) >= camera.nearClipPlane;
     }
 
-    private void PerformBoxSelection(OctreeSettings placer)
+    private static int PickProbe(Vector3[] positions, Vector2 mouse, Camera camera, float radius)
     {
-        Rect screenRect = RectMinMax(placer.boxStartMousePos, placer.boxCurrentMousePos);
-
-        if (!Event.current.shift)
+        int nearest = -1;
+        float bestDistance = radius * radius;
+        float bestDepth = float.PositiveInfinity;
+        Vector3 cameraPosition = camera.transform.position;
+        Vector3 cameraForward = camera.transform.forward;
+        float nearClip = camera.nearClipPlane;
+        for (int i = 0; i < positions.Length; i++)
         {
-            placer.selectedIndices.Clear();
-        }
-
-        for (int i = 0; i < placer.ProbeCount; i++)
-        {
-            Vector2 screenPoint = HandleUtility.WorldToGUIPoint(placer.GetProbeWorldPosition(i));
-            if (screenRect.Contains(screenPoint))
+            float depth = Vector3.Dot(positions[i] - cameraPosition, cameraForward);
+            if (depth < nearClip) continue;
+            float distance = (HandleUtility.WorldToGUIPoint(positions[i]) - mouse).sqrMagnitude;
+            if (distance < bestDistance || (distance == bestDistance && depth < bestDepth))
             {
-                if (!placer.selectedIndices.Contains(i))
-                {
-                    placer.selectedIndices.Add(i);
-                }
+                nearest = i;
+                bestDistance = distance;
+                bestDepth = depth;
             }
         }
+        return nearest;
+    }
+
+    private void PerformBoxSelection(OctreeSettings placer, Vector3[] positions, Camera camera)
+    {
+        Rect screenRect = RectMinMax(placer.boxStartMousePos, placer.boxCurrentMousePos);
+        var selected = Event.current.shift ? new HashSet<int>(placer.selectedIndices) : new HashSet<int>();
+        Vector3 cameraPosition = camera.transform.position;
+        Vector3 cameraForward = camera.transform.forward;
+        float nearClip = camera.nearClipPlane;
+        for (int i = 0; i < positions.Length; i++)
+        {
+            if (Vector3.Dot(positions[i] - cameraPosition, cameraForward) < nearClip) continue;
+            if (screenRect.Contains(HandleUtility.WorldToGUIPoint(positions[i]))) selected.Add(i);
+        }
+        placer.selectedIndices = new List<int>(selected);
+        probeSceneRenderer.InvalidateSelection();
         EditorUtility.SetDirty(placer);
     }
 
@@ -517,15 +511,7 @@ public class Shadowbaker : Editor
         if (placer.selectedIndices.Count == 0) return;
 
         Undo.RecordObject(placer, "Delete Probes");
-        placer.selectedIndices.Sort((a, b) => b.CompareTo(a));
-
-        foreach (int index in placer.selectedIndices)
-        {
-            if (index >= 0 && index < placer.ProbeCount)
-            {
-                placer.RemoveProbeAt(index);
-            }
-        }
+        placer.RemoveProbes(placer.selectedIndices);
         placer.selectedIndices.Clear();
         SaveProbeChanges(placer);
     }
@@ -653,6 +639,127 @@ public class Shadowbaker : Editor
         settings.selectedIndices.Clear();
         SaveProbeChanges(settings);
         Undo.CollapseUndoOperations(group);
+    }
+
+    private sealed class ProbeSceneRenderer
+    {
+        private Vector3[] positions;
+        private Matrix4x4 probeToWorld;
+        private int revision;
+        private bool invalid = true;
+        private bool meshDirty = true;
+        private bool selectionDirty = true;
+        private int selectedCount = -1;
+        private Mesh mesh;
+        private Material material;
+        private Color32[] colors;
+        private Vector3[] vertices;
+
+        internal void Invalidate() => invalid = true;
+        internal void InvalidateSelection() => selectionDirty = true;
+
+        internal Vector3[] GetPositions(OctreeSettings settings)
+        {
+            Matrix4x4 matrix = settings.ProbeRoot.localToWorldMatrix;
+            if (invalid || positions == null || positions.Length != settings.ProbeCount ||
+                revision != settings.ProbeRevision || !probeToWorld.Equals(matrix))
+            {
+                positions = settings.GetProbeWorldPositions();
+                probeToWorld = matrix;
+                revision = settings.ProbeRevision;
+                invalid = false;
+                meshDirty = true;
+                selectionDirty = true;
+            }
+            return positions;
+        }
+
+        internal void Draw(OctreeSettings settings, Camera camera, float radius)
+        {
+            Vector3[] points = GetPositions(settings);
+            if (points.Length == 0) return;
+            if (material == null)
+            {
+                Shader shader = Shader.Find("Hidden/MoonlightVRC/ProbeSceneMarkers");
+                if (shader == null) return;
+                material = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
+            }
+            if (mesh == null)
+            {
+                mesh = new Mesh { name = "Probe Editor Markers", hideFlags = HideFlags.HideAndDontSave };
+                mesh.MarkDynamic();
+                meshDirty = true;
+            }
+            if (meshDirty)
+            {
+                // Four vertices per billboard; 32-bit indices also handle the full 65,536-probe capacity.
+                bool topologyChanged = vertices == null || vertices.Length != points.Length * 4;
+                if (topologyChanged) vertices = new Vector3[points.Length * 4];
+                for (int i = 0; i < points.Length; i++)
+                {
+                    int v = i * 4;
+                    vertices[v] = vertices[v + 1] = vertices[v + 2] = vertices[v + 3] = points[i];
+                }
+                if (topologyChanged)
+                {
+                    var uv = new Vector2[vertices.Length];
+                    var indices = new int[points.Length * 6];
+                    colors = new Color32[vertices.Length];
+                    for (int i = 0; i < points.Length; i++)
+                    {
+                        int v = i * 4;
+                        uv[v] = new Vector2(-1f, -1f);
+                        uv[v + 1] = new Vector2(-1f, 1f);
+                        uv[v + 2] = new Vector2(1f, 1f);
+                        uv[v + 3] = new Vector2(1f, -1f);
+                        int t = i * 6;
+                        indices[t] = v;
+                        indices[t + 1] = v + 1;
+                        indices[t + 2] = v + 2;
+                        indices[t + 3] = v;
+                        indices[t + 4] = v + 2;
+                        indices[t + 5] = v + 3;
+                    }
+                    mesh.Clear();
+                    mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+                    mesh.vertices = vertices;
+                    mesh.uv = uv;
+                    mesh.triangles = indices;
+                }
+                else mesh.vertices = vertices;
+                meshDirty = false;
+                selectionDirty = true;
+            }
+            if (selectionDirty || selectedCount != settings.selectedIndices.Count)
+            {
+                var selected = new HashSet<int>(settings.selectedIndices);
+                Color32 normal = Color.cyan;
+                Color32 highlight = Color.yellow;
+                for (int i = 0; i < points.Length; i++)
+                {
+                    int v = i * 4;
+                    Color32 color = selected.Contains(i) ? highlight : normal;
+                    colors[v] = colors[v + 1] = colors[v + 2] = colors[v + 3] = color;
+                }
+                mesh.colors32 = colors;
+                selectedCount = settings.selectedIndices.Count;
+                selectionDirty = false;
+            }
+            material.SetFloat("_MarkerRadius", radius * EditorGUIUtility.pixelsPerPoint);
+            material.SetVector("_ViewportSize", new Vector4(camera.pixelWidth, camera.pixelHeight, 0f, 0f));
+            if (material.SetPass(0)) Graphics.DrawMeshNow(mesh, Matrix4x4.identity);
+        }
+
+        internal void Dispose()
+        {
+            if (mesh != null) Object.DestroyImmediate(mesh);
+            if (material != null) Object.DestroyImmediate(material);
+            mesh = null;
+            material = null;
+            vertices = null;
+            colors = null;
+            invalid = true;
+        }
     }
 }
 #endif
