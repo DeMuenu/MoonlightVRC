@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections.Generic;
+using UnityEngine.Assertions.Comparers;
 
 public class ProbeBaker : MonoBehaviour
 {
@@ -67,6 +68,13 @@ public class ProbeBaker : MonoBehaviour
         {
             probePositions[i] = settings.probeRootTransform.GetChild(i).position;
         }
+
+        int[] probeIndices = new int[childCount];
+        ProbeNode[] probeNodes = new ProbeNode[childCount];
+        for (int i = 0; i < childCount; i++)
+            probeIndices[i] = i;
+        int nextProbeNode = 0;
+        int probeTreeRoot = BuildProbeTree(probeIndices, 0, childCount - 1, 0, probePositions, probeNodes, ref nextProbeNode);
 
         LightmapData[] lightmaps = LightmapSettings.lightmaps;
         if (lightmaps == null || lightmaps.Length == 0)
@@ -188,12 +196,12 @@ public class ProbeBaker : MonoBehaviour
                                     Vector3 worldPos = worldVerts[i0] * w0 + worldVerts[i1] * w1 + worldVerts[i2] * w2;
                                     Vector3 worldNormal = (worldNormals[i0] * w0 + worldNormals[i1] * w1 + worldNormals[i2] * w2).normalized;
 
-                                    int[] closest = Get3ClosestProbes(worldPos, worldNormal, probePositions);
+                                    Get3ClosestProbes(worldPos, worldNormal, probePositions, probeNodes, probeTreeRoot, out int closest0, out int closest1, out int closest2);
 
                                     Color c = new Color(
-                                        (float)closest[0] / 65535.0f,
-                                        (float)closest[1] / 65535.0f,
-                                        (float)closest[2] / 65535.0f,
+                                        (float)closest0 / 65535.0f,
+                                        (float)closest1 / 65535.0f,
+                                        (float)closest2 / 65535.0f,
                                         1.0f
                                     );
 
@@ -248,102 +256,174 @@ public class ProbeBaker : MonoBehaviour
         return w0 >= 0f && w1 >= 0f && w2 >= 0f;
     }
 
-    private int[] Get3ClosestProbes(Vector3 pos, Vector3 normal, Vector3[] probePositions)
+    private struct ProbeNode
     {
-        List<int> validProbes = new List<int>();
-        List<float> validDistances = new List<float>();
-
-        for (int i = 0; i < probePositions.Length; i++)
-        {
-            Vector3 dirToProbe = probePositions[i] - pos;
-            float dist = dirToProbe.magnitude;
-
-            if (dist < 0.0001f)
-            {
-                validProbes.Add(i);
-                validDistances.Add(dist);
-                continue;
-            }
-
-            Vector3 dirNormalized = dirToProbe / dist;
-
-            if (Vector3.Dot(dirNormalized, normal) <= 0f) continue;
-
-            Ray ray = new Ray(pos + normal * 0.001f, dirNormalized);
-            if (Physics.Raycast(ray, out RaycastHit hit, dist - 0.002f, ~0, QueryTriggerInteraction.Ignore))
-            {
-                continue;
-            }
-
-            validProbes.Add(i);
-            validDistances.Add(dist);
-        }
-
-        for (int i = 0; i < validProbes.Count - 1; i++)
-        {
-            for (int j = i + 1; j < validProbes.Count; j++)
-            {
-                if (validDistances[j] < validDistances[i])
-                {
-                    float tempD = validDistances[i]; validDistances[i] = validDistances[j]; validDistances[j] = tempD;
-                    int tempP = validProbes[i]; validProbes[i] = validProbes[j]; validProbes[j] = tempP;
-                }
-            }
-        }
-
-        int best1 = 0, best2 = 0, best3 = 0;
-
-        if (validProbes.Count >= 3)
-        {
-            best1 = validProbes[0];
-            best2 = validProbes[1];
-            best3 = validProbes[2];
-        }
-        else if (validProbes.Count == 2)
-        {
-            best1 = validProbes[0];
-            best2 = validProbes[1];
-            best3 = validProbes[1];
-        }
-        else if (validProbes.Count == 1)
-        {
-            best1 = validProbes[0];
-            best2 = validProbes[0];
-            best3 = validProbes[0];
-        }
-        else
-        {
-            return GetClosestProbesAbsoluteFallback(pos, probePositions);
-        }
-
-        return new int[] { best1, best2, best3 };
+        public int probeIndex;
+        public int left;
+        public int right;
+        public int axis;
     }
 
-    private int[] GetClosestProbesAbsoluteFallback(Vector3 pos, Vector3[] probePositions)
+    private struct ProbeSearchResults
     {
-        int best1 = 0, best2 = 0, best3 = 0;
-        float dist1 = float.MaxValue, dist2 = float.MaxValue, dist3 = float.MaxValue;
+        public int count;
+        public int index0;
+        public int index1;
+        public int index2;
+        public float distance0;
+        public float distance1;
+        public float distance2;
 
-        for (int i = 0; i < probePositions.Length; i++)
+        public void Reset()
         {
-            float sqrDist = (probePositions[i] - pos).sqrMagnitude;
-            if (sqrDist < dist1)
-            {
-                best3 = best2; dist3 = dist2;
-                best2 = best1; dist2 = dist1;
-                best1 = i;    dist1 = sqrDist;
-            }
-            else if (sqrDist < dist2)
-            {
-                best3 = best2; dist3 = dist2;
-                best2 = i;    dist2 = sqrDist;
-            }
-            else if (sqrDist < dist3)
-            {
-                best3 = i;    dist3 = sqrDist;
-            }
+            count = 0;
+            index0 = index1 = index2 = -1;
+            distance0 = distance1 = distance2 = float.MaxValue;
         }
-        return new int[] { best1, best2, best3 };
+
+        public float MaxDistance
+        {
+            get { return count < 3 ? float.MaxValue : distance2; }
+        }
+
+        public void Add(int index, float distance)
+        {
+            if (distance < distance0 || (distance == distance0 && index < index0))
+            {
+                index2 = index1;
+                distance2 = distance1;
+                index1 = index0;
+                distance1 = distance0;
+                index0 = index;
+                distance0 = distance;
+            }
+            else if (distance < distance1 || (distance == distance1 && index < index1))
+            {
+                index2 = index1;
+                distance2 = distance1;
+                index1 = index;
+                distance1 = distance;
+            }
+            else if (distance < distance2 || (distance == distance2 && index < index2))
+            {
+                index2 = index;
+                distance2 = distance;
+            }
+
+            if (count < 3)
+                count++;
+        }
+    }
+
+    private int BuildProbeTree(int[] indices, int start, int end, int depth, Vector3[] positions, ProbeNode[] nodes, ref int nextNode)
+    {
+        if (start > end)
+            return -1;
+
+        int axis = depth % 3;
+        int median = (start + end) / 2;
+        SelectProbeMedian(indices, start, end, median, axis, positions);
+
+        int nodeIndex = nextNode++;
+        nodes[nodeIndex].probeIndex = indices[median];
+        nodes[nodeIndex].axis = axis;
+        nodes[nodeIndex].left = BuildProbeTree(indices, start, median - 1, depth + 1, positions, nodes, ref nextNode);
+        nodes[nodeIndex].right = BuildProbeTree(indices, median + 1, end, depth + 1, positions, nodes, ref nextNode);
+        return nodeIndex;
+    }
+
+    private void SelectProbeMedian(int[] indices, int start, int end, int target, int axis, Vector3[] positions)
+    {
+        while (start < end)
+        {
+            int pivotIndex = indices[(start + end) / 2];
+            int pivotPosition = start;
+            for (int i = start; i <= end; i++)
+            {
+                if (indices[i] == pivotIndex)
+                {
+                    Swap(indices, i, end);
+                    break;
+                }
+            }
+
+            for (int i = start; i < end; i++)
+            {
+                if (CompareProbeIndices(indices[i], pivotIndex, axis, positions) < 0)
+                {
+                    Swap(indices, i, pivotPosition);
+                    pivotPosition++;
+                }
+            }
+            Swap(indices, pivotPosition, end);
+
+            if (pivotPosition == target)
+                return;
+            if (target < pivotPosition)
+                end = pivotPosition - 1;
+            else
+                start = pivotPosition + 1;
+        }
+    }
+
+    private int CompareProbeIndices(int indexA, int indexB, int axis, Vector3[] positions)
+    {
+        float coordinateA = GetCoordinate(positions[indexA], axis);
+        float coordinateB = GetCoordinate(positions[indexB], axis);
+        int comparison = coordinateA.CompareTo(coordinateB);
+        return comparison != 0 ? comparison : indexA.CompareTo(indexB);
+    }
+
+    private float GetCoordinate(Vector3 position, int axis)
+    {
+        if (axis == 0) return position.x;
+        if (axis == 1) return position.y;
+        return position.z;
+    }
+
+    private void Swap(int[] values, int indexA, int indexB)
+    {
+        int value = values[indexA];
+        values[indexA] = values[indexB];
+        values[indexB] = value;
+    }
+
+    private void Get3ClosestProbes(Vector3 pos, Vector3 normal, Vector3[] probePositions, ProbeNode[] nodes, int root,
+        out int closest0, out int closest1, out int closest2)
+    {
+        ProbeSearchResults results = new ProbeSearchResults();
+        results.Reset();
+        SearchProbeTree(root, pos, normal, probePositions, nodes, true, ref results);
+
+        if (results.count == 0)
+        {
+            results.Reset();
+            SearchProbeTree(root, pos, normal, probePositions, nodes, false, ref results);
+        }
+
+        closest0 = results.index0;
+        closest1 = results.count > 1 ? results.index1 : results.index0;
+        closest2 = results.count > 2 ? results.index2 : closest1;
+    }
+
+    private void SearchProbeTree(int nodeIndex, Vector3 pos, Vector3 normal, Vector3[] positions, ProbeNode[] nodes,
+        bool requireFrontFacing, ref ProbeSearchResults results)
+    {
+        if (nodeIndex < 0)
+            return;
+
+        ProbeNode node = nodes[nodeIndex];
+        Vector3 offset = positions[node.probeIndex] - pos;
+        float distance = offset.sqrMagnitude;
+        if (!requireFrontFacing || (distance > 0f && Vector3.Dot(offset, normal) > 0f))
+            results.Add(node.probeIndex, distance);
+
+        float axisOffset = GetCoordinate(pos, node.axis) - GetCoordinate(positions[node.probeIndex], node.axis);
+        int nearNode = axisOffset < 0f ? node.left : node.right;
+        int farNode = axisOffset < 0f ? node.right : node.left;
+        SearchProbeTree(nearNode, pos, normal, positions, nodes, requireFrontFacing, ref results);
+        if (axisOffset * axisOffset <= results.MaxDistance)
+            SearchProbeTree(farNode, pos, normal, positions, nodes, requireFrontFacing, ref results);
     }
 
     [ContextMenu("Apply Lightmap Indices Automatically")]
