@@ -100,77 +100,75 @@ Shader "DeMuenu/MoonlightVRC/Standard_ShadowTest"
             // Helper to fetch probe world position from the 256x256 position texture
             float3 GetProbePosition(int index)
             {
-                float x = (float)(index % 256) + 0.5f;
-                float y = (float)(index / 256) + 0.5f;
-                float2 uv = float2(x / 256.0f, y / 256.0f);
-                return tex2Dlod(_ProbePosTex, float4(uv, 0, 0)).xyz;
+                uint uIndex = (uint)max(0, index);
+                float x = (float)(uIndex & 255u) + 0.5f;
+                float y = (float)(uIndex >> 8u) + 0.5f;
+                float2 uv = float2(x, y) * (1.0f / 256.0f);
+                return tex2Dlod(_ProbePosTex, float4(uv, 0.0f, 0.0f)).xyz;
             }
 
-            // USER FUNCTION: Hook your probe ID and light ID data source here
+            // Hook your probe ID and light ID data source here
             float GetProbeLightValue(int probeId, int lightId)
             {
-                // 1. Calculate the linear sample index (matches the packer order: light changes every _ProbeCount steps)
-                uint sampleIndex = (uint)lightId * (uint)_ProbeCount + (uint)probeId;
+                uint sampleIndex = (uint)lightId * (uint)max(1, _ProbeCount) + (uint)max(0, probeId);
 
-                // 2. Each pixel packs 4 samples into RGBA
-                uint pixelLinearIndex = sampleIndex / 4u;
-                uint channelIndex = sampleIndex % 4u; // 0 = R, 1 = G, 2 = B, 3 = A
+                uint pixelLinearIndex = sampleIndex >> 2u; // Divide by 4
+                uint channelIndex = sampleIndex & 3u;      // Modulo 4 (0 = R, 1 = G, 2 = B, 3 = A)
 
-                // 3. Map the linear pixel index into 2D texture coordinates
-                uint width = (uint)_ShadowCalculationTex_TexelSize.z;
+                // Guard against division by zero if texture isn't bound yet
+                uint width = max(1u, (uint)round(_ShadowCalculationTex_TexelSize.z));
                 uint px = pixelLinearIndex % width;
                 uint py = pixelLinearIndex / width;
 
-                // 4. Sample the exact pixel center from the render texture
-                float2 uv = (float2(px, py) + 0.5f) * _ShadowCalculationTex_TexelSize.xy;
-                float4 col = tex2D(_ShadowCalculationTex, uv);
+                float2 texelSize = abs(_ShadowCalculationTex_TexelSize.xy);
+                float2 uv = (float2(px, py) + 0.5f) * texelSize;
 
-                // 5. Extract the specific channel corresponding to this probe-light pair
-                float val = (channelIndex == 0) ? col.r : 
-                            (channelIndex == 1) ? col.g : 
-                            (channelIndex == 2) ? col.b : col.a;
+                #if UNITY_UV_STARTS_AT_TOP
+                if (_ShadowCalculationTex_TexelSize.y < 0.0)
+                {
+                    uv.y = 1.0f - uv.y;
+                }
+                #endif
+                
+                // CRITICAL FOR VULKAN: Must use tex2Dlod inside dynamic loops
+                float4 col = tex2Dlod(_ShadowCalculationTex, float4(uv, 0.0f, 0.0f));
 
-                return 1 - val;
+                // Indexing a vector with [channelIndex] is cleaner and avoids nested ternaries in SPIR-V
+                return col[channelIndex];
             }
 
- // Blending function for the 3 closest probes (Squared distance only)
-float BlendClosestProbes(float3 worldPos, float2 lightmapUV, float lightmapIndex, int lightId)
-{
-    // Sample the 3 closest probe indices from the Texture2DArray
-    float3 sampleCoords = float3(lightmapUV, lightmapIndex);
-    float4 encodedIndices = UNITY_SAMPLE_TEX2DARRAY(_ProbeIndexTexArray, sampleCoords);
-    int3 probeIndices = round(encodedIndices.rgb * 65535.0f);
+            // Precompute the 3 closest probe indices and their weights ONCE per pixel outside the light loop
+            void GetClosestProbesAndWeights(float3 worldPos, float2 lightmapUV, float lightmapIndex, out int3 probeIndices, out float3 weights)
+            {
+                float3 sampleCoords = float3(lightmapUV, lightmapIndex);
+                
+                // CRITICAL FOR VULKAN: Explicit LOD 0 sampling
+                float4 encodedIndices = UNITY_SAMPLE_TEX2DARRAY_LOD(_ProbeIndexTexArray, sampleCoords, 0.0f);
+                probeIndices = int3(round(encodedIndices.rgb * 65535.0f));
 
-    // Fetch world positions directly
-    float3 p0 = GetProbePosition(probeIndices.x);
-    float3 p1 = GetProbePosition(probeIndices.y);
-    float3 p2 = GetProbePosition(probeIndices.z);
+                float3 p0 = GetProbePosition(probeIndices.x);
+                float3 p1 = GetProbePosition(probeIndices.y);
+                float3 p2 = GetProbePosition(probeIndices.z);
 
-    // Vector offsets from pixel to probes
-    float3 v0 = p0 - worldPos;
-    float3 v1 = p1 - worldPos;
-    float3 v2 = p2 - worldPos;
+                float3 v0 = p0 - worldPos;
+                float3 v1 = p1 - worldPos;
+                float3 v2 = p2 - worldPos;
 
-    // Squared distances (avoids costly sqrt operations)
-    float sqrDist0 = dot(v0, v0);
-    float sqrDist1 = dot(v1, v1);
-    float sqrDist2 = dot(v2, v2);
+                float sqrDist0 = dot(v0, v0);
+                float sqrDist1 = dot(v1, v1);
+                float sqrDist2 = dot(v2, v2);
 
-    // Inverse distance weights
-    float w0 = 1.0f / (sqrDist0 + 1e-5f);
-    float w1 = 1.0f / (sqrDist1 + 1e-5f);
-    float w2 = 1.0f / (sqrDist2 + 1e-5f);
+                float3 w = 1.0f / (float3(sqrDist0, sqrDist1, sqrDist2) + 1e-5f);
+                weights = w / (w.x + w.y + w.z + 1e-5f);
+            }
 
-    float weightSum = w0 + w1 + w2 + 1e-5f;
-    w0 /= weightSum;
-    w1 /= weightSum;
-    w2 /= weightSum;
-
-    // Fetch lighting values and blend
-    return (GetProbeLightValue(probeIndices.x, lightId) * w0) + 
-           (GetProbeLightValue(probeIndices.y, lightId) * w1) + 
-           (GetProbeLightValue(probeIndices.z, lightId) * w2);
-}
+            // Fast blending inside the loop using precomputed indices and weights
+            float BlendClosestProbes(int3 probeIndices, float3 weights, int lightId)
+            {
+                return (GetProbeLightValue(probeIndices.x, lightId) * weights.x) + 
+                    (GetProbeLightValue(probeIndices.y, lightId) * weights.y) + 
+                    (GetProbeLightValue(probeIndices.z, lightId) * weights.z);
+            }
 
             v2f vert (appdata v)
             {
@@ -211,6 +209,10 @@ float BlendClosestProbes(float3 worldPos, float2 lightmapUV, float lightmapIndex
 
                 OutLoopSetup(i, _Udon_PlayerCount)
 
+                int3 closestProbeIndices;
+                float3 probeWeights;
+                GetClosestProbesAndWeights(i.worldPos, i.uv2, _LightmapIndex, closestProbeIndices, probeWeights);
+
                 [loop]
                 for (int LightCounter = 0; LightCounter < count; LightCounter++)
                 {
@@ -223,9 +225,9 @@ float BlendClosestProbes(float3 worldPos, float2 lightmapUV, float lightmapIndex
 
                     LightTypeCalculations(_Udon_LightColors, LightCounter, i, NdotL, dIntensity, _Udon_LightPositions[LightCounter].a, _Udon_LightPositions[LightCounter].xyz);
                     
-                    // EXAMPLE: Blend probe-based values using the current Light ID (LightCounter) and pixel world pos/uv2
-                    float blendedProbeValue = BlendClosestProbes(i.worldPos, i.uv2, _LightmapIndex, LightCounter);
-
+                    
+                    float blendedProbeValue = BlendClosestProbes(closestProbeIndices, probeWeights, LightCounter);
+                    
                     float4 ShadowCasterMult_1 = 1;
                     float4 ShadowCasterMult_2 = 1;
 
